@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Permitting Friction Index</title>
+    <meta name="description" content="The first empirical measurement of permitting timeline variance for large-scale infrastructure projects in the United States.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            color: #1C2B3A;
+            background: #FFFFFF;
+            font-size: 17px;
+            line-height: 1.7;
+            font-weight: 400;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+            overflow-wrap: break-word;
+        }
+
+        /* NAV */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: transparent;
+            border-bottom: none;
+            height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 56px;
+            transition: background 0.3s, border-bottom 0.3s, box-shadow 0.3s;
+        }
+
+        nav.scrolled {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(232, 232, 232, 0.5);
+            box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+        }
+
+        nav .logo {
+            font-size: 18px;
+            font-weight: 700;
+            color: #FFFFFF;
+            letter-spacing: -0.3px;
+            transition: color 0.3s;
+        }
+
+        nav.scrolled .logo {
+            color: #1C2B3A;
+        }
+
+        nav a {
+            font-size: 15px;
+            font-weight: 600;
+            color: #FFFFFF;
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        nav.scrolled a {
+            color: #2E6DA4;
+        }
+
+        nav a:hover {
+            opacity: 0.8;
+        }
+
+        /* LAYOUT */
+        main {
+            margin-top: 0;
+        }
+
+        .section {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 100px 48px;
+        }
+
+        .section-alt {
+            background: #F7F7F7;
+        }
+
+        .section-label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2E6DA4;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-size: 36px;
+            font-weight: 700;
+            color: #1C2B3A;
+            line-height: 1.2;
+            letter-spacing: -0.5px;
+            margin-bottom: 24px;
+        }
+
+        h1 {
+            font-size: 48px;
+            font-weight: 700;
+            color: #1C2B3A;
+            line-height: 1.15;
+            letter-spacing: -1px;
+            margin-bottom: 20px;
+        }
+
+        h3 {
+            font-size: 22px;
+            font-weight: 600;
+            color: #1C2B3A;
+            margin-bottom: 12px;
+        }
+
+        .lead-text {
+            font-size: 20px;
+            color: #3A3A3A;
+            line-height: 1.65;
+            max-width: 780px;
+        }
+
+        .body-text {
+            font-size: 17px;
+            color: #555555;
+            line-height: 1.7;
+        }
+
+        /* PLACEHOLDER IMAGE */
+        .placeholder-img {
+            background: #E2E8F0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #94A3B8;
+            font-size: 15px;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        /* HERO */
+        .hero {
+            position: relative;
+            min-height: 100vh;
+            background: #1C2B3A;
+            display: flex;
+            align-items: flex-end;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .hero-image {
+            position: absolute;
+            inset: 0;
+            background: url('assets/HeroImage.jpg') center center / cover no-repeat;
+            filter: blur(1.5px);
+            transform: scale(1.01);
+        }
+
+        .hero-image::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                to bottom,
+                rgba(28, 43, 58, 0.0) 0%,
+                rgba(28, 43, 58, 0.2) 40%,
+                rgba(28, 43, 58, 0.85) 80%,
+                rgba(28, 43, 58, 0.95) 100%
+            );
+        }
+
+        .hero-content {
+            position: relative;
+            z-index: 1;
+            width: 100%;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 56px 64px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 48px;
+        }
+
+        .hero-left {
+            max-width: 700px;
+        }
+
+        .hero-left .eyebrow {
+            font-size: 13px;
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.45);
+            text-transform: uppercase;
+            letter-spacing: 2.5px;
+            margin-bottom: 20px;
+        }
+
+        .hero-left h1 {
+            color: #FFFFFF;
+            font-size: 64px;
+            margin-bottom: 0;
+            line-height: 1.05;
+            letter-spacing: -2px;
+        }
+
+        .hero-card {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 10px;
+            padding: 18px 20px;
+            width: 340px;
+            flex-shrink: 0;
+        }
+
+        .hero-card-img {
+            height: 110px;
+            border-radius: 6px;
+            margin-top: 12px;
+            background: url('assets/SubImage.jpg') center 30% / cover no-repeat;
+        }
+
+        .hero-card p {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 13px;
+            line-height: 1.55;
+            font-weight: 400;
+        }
+
+        /* WHAT PFI MEASURES */
+        .measures-top {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 56px;
+            align-items: start;
+            margin-bottom: 56px;
+        }
+
+        .measures-top .placeholder-img {
+            height: 320px;
+        }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+        }
+
+        .two-col-card {
+            background: #FFFFFF;
+            border-radius: 10px;
+            padding: 36px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+            transition: box-shadow 0.2s, transform 0.2s;
+        }
+
+        .two-col-card:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08), 0 8px 28px rgba(0,0,0,0.06);
+            transform: translateY(-2px);
+        }
+
+        .two-col-card h3 {
+            font-size: 20px;
+            margin-bottom: 14px;
+        }
+
+        /* INITIAL COVERAGE */
+        .three-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 32px;
+            margin-top: 40px;
+            margin-bottom: 40px;
+        }
+
+        .coverage-card {
+            background: #FFFFFF;
+            border-radius: 10px;
+            padding: 32px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+        }
+
+        .coverage-card .col-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #2E6DA4;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #E2E8F0;
+        }
+
+        .coverage-card ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .coverage-card ul li {
+            font-size: 17px;
+            color: #1C2B3A;
+            padding: 6px 0;
+        }
+
+        .closing-line {
+            font-size: 16px;
+            color: #555555;
+            font-style: italic;
+        }
+
+        .coverage-image-row {
+            margin-top: 48px;
+        }
+
+        .coverage-image-row .placeholder-img {
+            height: 240px;
+            width: 100%;
+        }
+
+        /* WHO USES PFI */
+        .who-header {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 56px;
+            align-items: start;
+            margin-bottom: 48px;
+        }
+
+        .who-header .placeholder-img {
+            height: 280px;
+        }
+
+        .card-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+
+        .card {
+            background: #FFFFFF;
+            border: none;
+            border-radius: 10px;
+            padding: 36px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+            transition: box-shadow 0.2s, transform 0.2s;
+        }
+
+        .card:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08), 0 8px 28px rgba(0,0,0,0.06);
+            transform: translateY(-2px);
+        }
+
+        .card h3 {
+            font-size: 18px;
+            font-weight: 700;
+            color: #1C2B3A;
+            margin-bottom: 10px;
+        }
+
+        .card p {
+            font-size: 16px;
+            color: #555555;
+            line-height: 1.6;
+        }
+
+        /* FOUNDING SUBSCRIBERS */
+        .founding-layout {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 56px;
+            align-items: center;
+        }
+
+        .founding-layout .placeholder-img {
+            height: 260px;
+        }
+
+        .email-link {
+            color: #2E6DA4;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .email-link:hover {
+            text-decoration: underline;
+        }
+
+        /* FOOTER */
+        footer {
+            background: #1C2B3A;
+            color: #FFFFFF;
+            padding: 64px 56px 32px;
+        }
+
+        .footer-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .footer-left {
+            font-size: 16px;
+            line-height: 1.6;
+        }
+
+        .footer-left .footer-name {
+            font-weight: 700;
+            font-size: 18px;
+            margin-bottom: 4px;
+        }
+
+        .footer-left .footer-domain {
+            color: #7A95AD;
+            font-size: 15px;
+        }
+
+        .footer-right a {
+            color: #FFFFFF;
+            text-decoration: none;
+            font-size: 15px;
+        }
+
+        .footer-right a:hover {
+            text-decoration: underline;
+        }
+
+        .footer-copyright {
+            max-width: 1100px;
+            margin: 48px auto 0;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+            text-align: center;
+            font-size: 13px;
+            color: #5A7A96;
+        }
+
+        /* ============ RESPONSIVE — TABLET (max 1024px) ============ */
+        @media (max-width: 1024px) {
+            nav {
+                padding: 0 36px;
+            }
+
+            .section {
+                padding: 80px 36px;
+            }
+
+            .hero-content {
+                padding: 0 36px 56px;
+                gap: 36px;
+            }
+
+            .hero-left h1 {
+                font-size: 48px;
+            }
+
+            .measures-top {
+                grid-template-columns: 1fr;
+                gap: 36px;
+            }
+
+            .measures-top .placeholder-img {
+                height: 240px;
+            }
+
+            .who-header {
+                grid-template-columns: 1fr;
+                gap: 36px;
+            }
+
+            .who-header .placeholder-img {
+                height: 220px;
+            }
+
+            .founding-layout {
+                grid-template-columns: 1fr;
+                gap: 36px;
+            }
+
+            .founding-layout .placeholder-img {
+                height: 200px;
+            }
+
+            .section-title {
+                font-size: 30px;
+            }
+
+            .lead-text {
+                font-size: 18px;
+            }
+        }
+
+        /* ============ RESPONSIVE — MOBILE (max 768px) ============ */
+        @media (max-width: 768px) {
+            nav {
+                padding: 0 20px;
+                height: 64px;
+            }
+
+            nav .logo {
+                font-size: 16px;
+            }
+
+            .section {
+                padding: 64px 20px;
+            }
+
+            .section-title {
+                font-size: 26px;
+            }
+
+            .lead-text {
+                font-size: 17px;
+            }
+
+            h1 {
+                font-size: 32px;
+            }
+
+            h3 {
+                font-size: 19px;
+            }
+
+            .body-text {
+                font-size: 16px;
+            }
+
+            .two-col {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+
+            .two-col-card {
+                padding: 28px;
+            }
+
+            .three-col {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+
+            .coverage-card {
+                padding: 24px;
+            }
+
+            .card-grid {
+                grid-template-columns: 1fr;
+                gap: 16px;
+            }
+
+            .card {
+                padding: 28px;
+            }
+
+            .footer-inner {
+                flex-direction: column;
+                gap: 24px;
+            }
+
+            footer {
+                padding: 48px 20px 24px;
+            }
+
+            .footer-copyright {
+                margin-top: 32px;
+                padding-top: 20px;
+            }
+
+            .hero {
+                min-height: 100svh;
+            }
+
+            .hero-content {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 24px;
+                padding: 0 20px 36px;
+            }
+
+            .hero-left h1 {
+                font-size: 38px;
+                letter-spacing: -1px;
+            }
+
+            .hero-left .eyebrow {
+                font-size: 11px;
+                margin-bottom: 14px;
+            }
+
+            .hero-card {
+                max-width: 100%;
+                padding: 22px 24px;
+            }
+
+            .hero-card p {
+                font-size: 14px;
+            }
+
+            .section-label {
+                font-size: 12px;
+                margin-bottom: 12px;
+            }
+
+            .measures-top .placeholder-img {
+                height: 200px;
+            }
+
+            .who-header .placeholder-img {
+                height: 180px;
+            }
+
+            .founding-layout .placeholder-img {
+                height: 160px;
+            }
+
+            .coverage-image-row .placeholder-img {
+                height: 180px;
+            }
+        }
+
+        /* ============ RESPONSIVE — SMALL PHONE (max 400px) ============ */
+        @media (max-width: 400px) {
+            nav {
+                padding: 0 16px;
+            }
+
+            nav .logo {
+                font-size: 15px;
+            }
+
+            nav a {
+                font-size: 14px;
+            }
+
+            .section {
+                padding: 48px 16px;
+            }
+
+            .section-title {
+                font-size: 24px;
+            }
+
+            h1 {
+                font-size: 28px;
+            }
+
+            .hero-content {
+                padding: 0 16px 28px;
+                gap: 20px;
+            }
+
+            .hero-left h1 {
+                font-size: 30px;
+            }
+
+            .hero-left .eyebrow {
+                font-size: 10px;
+                letter-spacing: 2px;
+            }
+
+            .hero-card {
+                padding: 18px 20px;
+            }
+
+            .hero-card p {
+                font-size: 13px;
+            }
+
+            .lead-text {
+                font-size: 16px;
+            }
+
+            .two-col-card {
+                padding: 22px;
+            }
+
+            .two-col-card h3 {
+                font-size: 18px;
+            }
+
+            .card {
+                padding: 22px;
+            }
+
+            .card h3 {
+                font-size: 16px;
+            }
+
+            .card p {
+                font-size: 14px;
+            }
+
+            .coverage-card {
+                padding: 20px;
+            }
+
+            .coverage-card ul li {
+                font-size: 15px;
+            }
+
+            .closing-line {
+                font-size: 14px;
+            }
+
+            footer {
+                padding: 36px 16px 16px;
+            }
+
+            .footer-left .footer-name {
+                font-size: 16px;
+            }
+
+            .footer-right a {
+                font-size: 14px;
+            }
+
+            .footer-copyright {
+                font-size: 11px;
+                margin-top: 24px;
+            }
+
+            .measures-top .placeholder-img {
+                height: 160px;
+            }
+
+            .who-header .placeholder-img {
+                height: 140px;
+            }
+
+            .founding-layout .placeholder-img {
+                height: 130px;
+            }
+
+            .coverage-image-row .placeholder-img {
+                height: 140px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- NAV -->
+    <nav>
+        <div class="logo">Permitting Friction Index</div>
+        <a href="#contact">Contact</a>
+    </nav>
+
+    <main>
+
+        <!-- SECTION 1: HERO -->
+        <section class="hero">
+            <div class="hero-image"></div>
+            <div class="hero-content">
+                <div class="hero-left">
+                    <div class="eyebrow">Reference Data Infrastructure</div>
+                    <h1>The Permitting Friction Index</h1>
+                </div>
+                <div class="hero-card">
+                    <p>The first empirical measurement of permitting timeline variance for large scale infrastructure projects in the United States.</p>
+                    <div class="hero-card-img"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 2: WHAT PFI MEASURES -->
+        <section class="section-alt">
+            <div class="section">
+                <div class="measures-top">
+                    <div>
+                        <div class="section-label">What PFI Measures</div>
+                        <p class="lead-text">PFI measures the distribution and variance of permitting timelines — not averages, not rankings, not predictions. The output is a shape, not a grade. Institutions use PFI to understand what permitting reality looks like across jurisdictions, project types, and time periods when capital is committed and outcomes are visible.</p>
+                    </div>
+                    <div class="placeholder-img" style="background: url('assets/ILLUSTRATIONDATAVISUAL.jpg') center center / cover no-repeat;"></div>
+                </div>
+                <div class="two-col">
+                    <div class="two-col-card">
+                        <h3>Methodology</h3>
+                        <p class="body-text">PFI is built exclusively from publicly available government records — agency filings, planning board minutes, docket histories, and regulatory approvals. Every data point is traceable to a primary source. PFI does not forecast, model, or speculate. It records what happened, when it happened, and where it is recorded.</p>
+                    </div>
+                    <div class="two-col-card">
+                        <h3>What PFI Does Not Do</h3>
+                        <p class="body-text">PFI does not rank states. It does not score agencies. It does not assign blame or recommend actions. It does not predict individual project outcomes. These boundaries are not limitations — they are what make the index credible and defensible over time.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 3: INITIAL COVERAGE -->
+        <section>
+            <div class="section">
+                <div class="section-label">Initial Coverage</div>
+                <p class="lead-text">The first release of PFI covers the following states and project categories.</p>
+                <div class="three-col">
+                    <div class="coverage-card">
+                        <div class="col-label">Launch States</div>
+                        <ul>
+                            <li>Texas</li>
+                            <li>Georgia</li>
+                            <li>Arizona</li>
+                        </ul>
+                    </div>
+                    <div class="coverage-card">
+                        <div class="col-label">Project Categories</div>
+                        <ul>
+                            <li>Data Centers</li>
+                            <li>Large-Scale Manufacturing</li>
+                            <li>Grid-Scale Transmission & Substation Infrastructure</li>
+                        </ul>
+                    </div>
+                    <div class="coverage-card">
+                        <div class="col-label">Historical Time Range</div>
+                        <ul>
+                            <li>2018 – Present</li>
+                        </ul>
+                    </div>
+                </div>
+                <p class="closing-line">Coverage expands systematically. Subscribers receive advance notice before each new state is added.</p>
+                <div class="coverage-image-row">
+                    <div class="placeholder-img" style="background: url('assets/MAP.png') center center / cover no-repeat;"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 4: WHO USES PFI -->
+        <section class="section-alt">
+            <div class="section">
+                <div class="who-header">
+                    <div>
+                        <div class="section-label">Who Uses PFI</div>
+                        <p class="lead-text">PFI is built for institutions that make capital-intensive infrastructure decisions where permitting variance creates material risk.</p>
+                    </div>
+                    <div class="placeholder-img" style="background: url('assets/INSTITUTIONALVISUAL.jpg') center center / cover no-repeat;"></div>
+                </div>
+                <div class="card-grid">
+                    <div class="card">
+                        <h3>Infrastructure Investors</h3>
+                        <p>PE infrastructure funds, infrastructure credit platforms, and institutional capital allocators evaluating project-level permitting risk across development markets.</p>
+                    </div>
+                    <div class="card">
+                        <h3>Hyperscalers & Industrial Developers</h3>
+                        <p>Companies building data centers, advanced manufacturing facilities, and semiconductor fabs where permitting variance directly affects site selection and capital sequencing.</p>
+                    </div>
+                    <div class="card">
+                        <h3>Utilities & Transmission Developers</h3>
+                        <p>Investor-owned utilities, grid operators, and transmission developers managing permitting timelines for large-load interconnection and grid infrastructure projects.</p>
+                    </div>
+                    <div class="card">
+                        <h3>Engineering & EPC Firms</h3>
+                        <p>Engineering and construction organizations using permitting distribution data to inform project scheduling, client advisories, and risk management frameworks.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 5: FOUNDING SUBSCRIBERS -->
+        <section>
+            <div class="section">
+                <div class="founding-layout">
+                    <div>
+                        <div class="section-label">Founding Subscribers</div>
+                        <p class="body-text" style="margin-bottom: 24px;">A limited number of founding institutional subscriptions are available for the initial three-state release. Founding subscribers receive access to the complete dataset upon release, annual updates, and advance notification as coverage expands to additional states.</p>
+                        <p class="body-text">Inquiries: <a href="mailto:gabriel@permitfriction.com" class="email-link">gabriel@permitfriction.com</a></p>
+                    </div>
+                    <div class="placeholder-img" style="background: url('assets/SupportingImage.avif') center center / cover no-repeat;"></div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER / CONTACT -->
+    <footer id="contact">
+        <div class="footer-inner">
+            <div class="footer-left">
+                <div class="footer-name">Permitting Friction Index</div>
+                <div class="footer-domain">permitfriction.com</div>
+            </div>
+            <div class="footer-right">
+                <a href="mailto:gabriel@permitfriction.com">gabriel@permitfriction.com</a>
+            </div>
+        </div>
+        <div class="footer-copyright">&copy; 2025 Permitting Friction Index. All rights reserved.</div>
+    </footer>
+
+    <script>
+        const nav = document.querySelector('nav');
+        const hero = document.querySelector('.hero');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > hero.offsetHeight - 80) {
+                nav.classList.add('scrolled');
+            } else {
+                nav.classList.remove('scrolled');
+            }
+        });
+    </script>
+
+</body>
+</html>
