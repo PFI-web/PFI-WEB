@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PFI — Team</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Inter', sans-serif;
+            color: #1C2B3A;
+            background: #FFFFFF;
+            font-size: 17px;
+            line-height: 1.7;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* SCREENS — only one visible at a time */
+        .screen { display: none; }
+        .screen.active { display: flex; }
+
+        /* ===== CENTERED SCREEN (login, onboarding, setup) ===== */
+        .centered-screen {
+            min-height: 100vh;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 48px 24px;
+        }
+        .screen-title {
+            font-size: 28px;
+            font-weight: 600;
+            letter-spacing: -0.3px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+        .screen-subtitle {
+            font-size: 16px;
+            color: #555;
+            margin-bottom: 48px;
+        }
+
+        /* ===== LOGIN ===== */
+        .employee-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+            max-width: 720px;
+            width: 100%;
+        }
+        .employee-card {
+            border: 1px solid #E0E0E0;
+            border-radius: 8px;
+            padding: 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .employee-card:hover {
+            border-color: #1C2B3A;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        }
+        .employee-card.selected {
+            border-color: #2E6DA4;
+            box-shadow: 0 0 0 2px rgba(46,109,164,0.2);
+        }
+        .employee-card .name { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+        .employee-card .role { font-size: 14px; color: #777; }
+        .primary-btn {
+            display: none;
+            margin-top: 32px;
+            background: #1C2B3A;
+            color: #FFF;
+            font-family: 'Inter', sans-serif;
+            font-size: 15px;
+            font-weight: 600;
+            padding: 14px 36px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .primary-btn.visible { display: inline-block; }
+        .primary-btn:hover { background: #2E6DA4; }
+        .primary-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .error-text {
+            display: none;
+            margin-top: 16px;
+            color: #D32F2F;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        /* ===== ONBOARDING ===== */
+        .onboarding-steps { max-width: 560px; width: 100%; }
+        .onboarding-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            padding: 20px 0;
+            border-bottom: 1px solid #F0F0F0;
+        }
+        .step-number {
+            width: 32px; height: 32px; border-radius: 50%;
+            background: #E0E0E0; color: #555;
+            font-size: 14px; font-weight: 700;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0;
+        }
+        .step-number.done { background: #2E6DA4; color: #FFF; }
+        .step-content { flex: 1; }
+        .step-content h3 { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+        .step-content p { font-size: 14px; color: #555; margin-bottom: 12px; }
+        .step-btn {
+            display: inline-block;
+            font-family: 'Inter', sans-serif;
+            font-size: 13px; font-weight: 600;
+            padding: 8px 20px;
+            border: 1px solid #E0E0E0; border-radius: 6px;
+            background: #FFF; color: #1C2B3A;
+            cursor: pointer; transition: border-color 0.2s;
+            margin-right: 8px; text-decoration: none;
+        }
+        .step-btn:hover { border-color: #1C2B3A; }
+        .skill-preview {
+            display: none; margin-top: 12px; padding: 16px;
+            background: #F8F8F8; border-radius: 6px;
+            font-size: 13px; color: #333; line-height: 1.6;
+            max-height: 200px; overflow-y: auto;
+            white-space: pre-wrap; word-wrap: break-word;
+        }
+
+        /* ===== SETUP SCREEN ===== */
+        .setup-content {
+            max-width: 800px;
+            width: 100%;
+            text-align: center;
+        }
+        .setup-content p {
+            font-size: 15px;
+            color: #555;
+            margin-bottom: 16px;
+            text-align: left;
+        }
+
+        /* ===== DASHBOARD ===== */
+        .dashboard-screen {
+            min-height: 100vh;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+        .topbar {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 32px;
+            border-bottom: 1px solid #F0F0F0;
+            background: #FFF; position: sticky; top: 0; z-index: 10;
+            width: 100%;
+        }
+        .topbar-left { display: flex; align-items: center; gap: 20px; }
+        .topbar-name { font-size: 16px; font-weight: 600; }
+        .topbar-counter {
+            font-size: 13px; font-weight: 500;
+            padding: 4px 12px; border-radius: 12px; background: #F0F0F0;
+        }
+        .topbar-counter.orange { background: #FFF3E0; color: #E65100; }
+        .topbar-counter.red { background: #FFEBEE; color: #C62828; }
+        .topbar-right { display: flex; align-items: center; gap: 12px; }
+        .topbar-btn {
+            font-family: 'Inter', sans-serif;
+            font-size: 13px; font-weight: 600;
+            padding: 8px 20px;
+            border: 1px solid #E0E0E0; border-radius: 6px;
+            background: #FFF; color: #1C2B3A;
+            cursor: pointer; transition: border-color 0.2s;
+        }
+        .topbar-btn:hover { border-color: #1C2B3A; }
+        .dashboard-content {
+            max-width: 1100px; margin: 0 auto;
+            padding: 32px; width: 100%;
+        }
+        .dashboard-actions { display: flex; gap: 12px; margin-bottom: 24px; }
+        .action-btn {
+            font-family: 'Inter', sans-serif;
+            font-size: 14px; font-weight: 600;
+            padding: 10px 24px;
+            border: 1px solid #E0E0E0; border-radius: 8px;
+            background: #FFF; color: #1C2B3A;
+            cursor: pointer; transition: border-color 0.2s, background 0.2s;
+        }
+        .action-btn:hover { border-color: #1C2B3A; background: #FAFAFA; }
+        .action-btn.primary { background: #1C2B3A; color: #FFF; border-color: #1C2B3A; }
+        .action-btn.primary:hover { background: #2E6DA4; border-color: #2E6DA4; }
+
+        /* Lead table */
+        .lead-table { width: 100%; border-collapse: collapse; }
+        .lead-table th {
+            text-align: left; font-size: 12px; font-weight: 600;
+            color: #999; text-transform: uppercase; letter-spacing: 1px;
+            padding: 12px 16px; border-bottom: 2px solid #F0F0F0;
+        }
+        .lead-table td {
+            padding: 14px 16px; font-size: 15px;
+            border-bottom: 1px solid #F5F5F5; vertical-align: top;
+        }
+        .lead-table tr:hover td { background: #FAFAFA; }
+        .lead-link { color: #2E6DA4; text-decoration: none; font-size: 14px; }
+        .lead-link:hover { text-decoration: underline; }
+        .lead-message {
+            width: 100%; min-height: 36px;
+            font-family: 'Inter', sans-serif; font-size: 14px; color: #333;
+            border: 1px solid transparent; border-radius: 4px;
+            padding: 6px 8px; background: transparent;
+            resize: vertical; transition: border-color 0.2s; line-height: 1.5;
+        }
+        .lead-message:focus { outline: none; border-color: #2E6DA4; background: #FFF; }
+        .lead-message::placeholder { color: #BBB; }
+        .status-badge {
+            display: inline-block; font-size: 12px; font-weight: 600;
+            padding: 4px 12px; border-radius: 12px;
+            cursor: pointer; transition: background 0.2s;
+        }
+        .status-badge.pending { background: #F0F0F0; color: #777; }
+        .status-badge.pending:hover { background: #E0E0E0; }
+        .status-badge.done { background: #E8F5E9; color: #2E7D32; cursor: default; }
+        .empty-state { text-align: center; padding: 80px 24px; color: #999; font-size: 16px; }
+
+        /* ===== MODALS ===== */
+        .modal-overlay {
+            display: none; position: fixed; inset: 0;
+            background: rgba(0,0,0,0.4); z-index: 100;
+            align-items: center; justify-content: center;
+        }
+        .modal-overlay.active { display: flex; }
+        .modal {
+            background: #FFF; border-radius: 12px; padding: 32px;
+            max-width: 480px; width: 90%; max-height: 80vh; overflow-y: auto;
+        }
+        .modal h2 { font-size: 20px; font-weight: 600; margin-bottom: 20px; }
+        .modal-field { margin-bottom: 16px; }
+        .modal-field label { display: block; font-size: 13px; font-weight: 600; color: #555; margin-bottom: 6px; }
+        .modal-field input, .modal-field select {
+            width: 100%; font-family: 'Inter', sans-serif; font-size: 15px;
+            padding: 10px 12px; border: 1px solid #E0E0E0; border-radius: 6px; color: #1C2B3A;
+        }
+        .modal-field input:focus, .modal-field select:focus { outline: none; border-color: #2E6DA4; }
+        .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+
+        /* Command block */
+        .command-block {
+            background: #1C2B3A; color: #E0E0E0;
+            font-family: monospace; font-size: 13px;
+            padding: 16px 40px 16px 16px; border-radius: 6px; margin: 16px 0;
+            word-break: break-all; line-height: 1.5; position: relative;
+        }
+        .copy-btn {
+            position: absolute; top: 8px; right: 8px;
+            font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600;
+            padding: 4px 10px;
+            border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;
+            background: transparent; color: #AAA; cursor: pointer;
+        }
+        .copy-btn:hover { color: #FFF; border-color: rgba(255,255,255,0.4); }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 768px) {
+            .employee-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+            .topbar { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
+            .dashboard-content { padding: 20px 16px; }
+            .dashboard-actions { flex-wrap: wrap; }
+            .lead-table { font-size: 14px; }
+            .lead-table th, .lead-table td { padding: 10px 8px; }
+            .modal { padding: 24px; }
+        }
+        @media (max-width: 400px) {
+            .employee-grid { grid-template-columns: 1fr; }
+            .screen-title { font-size: 24px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ===== SCREEN 1: LOGIN ===== -->
+    <div id="loginScreen" class="screen active centered-screen">
+        <h1 class="screen-title">PFI Team</h1>
+        <p class="screen-subtitle">Select your name to sign in</p>
+        <div class="employee-grid" id="employeeGrid"></div>
+        <div id="emailPrompt" style="display: none; margin-top: 32px; max-width: 360px; width: 100%; text-align: center;">
+            <p style="font-size: 14px; color: #555; margin-bottom: 12px;">Enter your email to sign in as <strong id="selectedName"></strong></p>
+            <input type="email" id="emailInput" placeholder="you@permitfriction.com" style="width: 100%; font-family: 'Inter', sans-serif; font-size: 15px; padding: 10px 12px; border: 1px solid #E0E0E0; border-radius: 6px; color: #1C2B3A;">
+            <button class="primary-btn visible" style="margin-top: 16px;" onclick="verifyEmail()">Sign In</button>
+        </div>
+        <p class="error-text" id="loginError"></p>
+    </div>
+
+    <!-- ===== SCREEN 2: ONBOARDING ===== -->
+    <div id="onboardingScreen" class="screen centered-screen">
+        <h1 class="screen-title">Get Started</h1>
+        <p class="screen-subtitle">Complete these steps to set up your account</p>
+        <div class="onboarding-steps">
+            <div class="onboarding-step">
+                <div class="step-number done" id="stepNum1">1</div>
+                <div class="step-content">
+                    <h3>Sign In</h3>
+                    <p>You're signed in. Nothing to do here.</p>
+                </div>
+            </div>
+            <div class="onboarding-step">
+                <div class="step-number" id="stepNum2">2</div>
+                <div class="step-content">
+                    <h3>Install Claude Code</h3>
+                    <p>Copy this command and paste it into your terminal.</p>
+                    <div class="command-block" id="claudeInstallCmd">npm install -g @anthropic-ai/claude-code<button class="copy-btn" onclick="copyText('claudeInstallCmd')">Copy</button></div>
+                    <button class="step-btn" onclick="markStep(2)">Done</button>
+                </div>
+            </div>
+            <!-- Skill setup removed — handled by Claude Code startup command -->
+            <div class="onboarding-step" style="display: none;">
+                <div class="step-number done" id="stepNum3">3</div>
+                <div class="step-content">
+                    <h3>Set Up Your Skill</h3>
+                </div>
+            </div>
+            <div class="onboarding-step">
+                <div class="step-number" id="stepNum4">3</div>
+                <div class="step-content">
+                    <h3>Open LinkedIn</h3>
+                    <p>Make sure you're logged into LinkedIn in your browser.</p>
+                    <a class="step-btn" href="https://www.linkedin.com" target="_blank">Open LinkedIn</a>
+                    <button class="step-btn" onclick="markStep(4)">Done</button>
+                </div>
+            </div>
+        </div>
+        <button class="primary-btn visible" id="enterAppBtn" disabled onclick="completeOnboarding()">Continue</button>
+    </div>
+
+    <!-- ===== SCREEN 3: SETUP (Start Claude Code) ===== -->
+    <div id="setupScreen" class="screen centered-screen">
+        <h1 class="screen-title">Start Claude Code</h1>
+        <p class="screen-subtitle">One command to connect everything</p>
+        <div class="setup-content">
+            <p>Paste this into your terminal. Claude Code will start, connect to the system, and wait for tasks. Leave the terminal open.</p>
+            <div class="command-block" id="startCmd" style="margin-bottom: 0;"><button class="copy-btn" onclick="copyText('startCmd')">Copy</button></div>
+        </div>
+        <button class="primary-btn visible" style="margin-top: 40px;" onclick="completeSetup()">I've Started Claude Code</button>
+    </div>
+
+    <!-- ===== SCREEN 4: DASHBOARD ===== -->
+    <div id="dashboardScreen" class="screen dashboard-screen">
+        <div class="topbar">
+            <div class="topbar-left">
+                <span class="topbar-name" id="topbarName"></span>
+                <span class="topbar-counter" id="topbarCounter">LinkedIn: 0 / 20</span>
+            </div>
+            <div class="topbar-right">
+                <button class="topbar-btn" onclick="openLimitsModal()">Limits</button>
+                <button class="topbar-btn" onclick="signOut()">Sign Out</button>
+            </div>
+        </div>
+        <div class="dashboard-content">
+            <div class="dashboard-actions">
+                <button class="action-btn" onclick="openFindLeadsModal()">Find Leads</button>
+                <button class="action-btn" onclick="openAddLeadModal()">Add Lead</button>
+                <button class="action-btn" onclick="openWriteMessagesModal()">Write Messages</button>
+                <button class="action-btn primary" onclick="openOutreachModal()">Perform Outreach</button>
+            </div>
+            <table class="lead-table" id="leadTable">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Company</th>
+                        <th>LinkedIn</th>
+                        <th>Message</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="leadTableBody"></tbody>
+            </table>
+            <div class="empty-state" id="emptyState">No leads yet. Click "Find Leads" or "Add Lead" to get started.</div>
+        </div>
+    </div>
+
+    <!-- ===== ADD LEAD MODAL ===== -->
+    <div class="modal-overlay" id="addLeadModal">
+        <div class="modal">
+            <h2>Add Lead</h2>
+            <div class="modal-field">
+                <label>Name</label>
+                <input type="text" id="leadName" placeholder="Full name">
+            </div>
+            <div class="modal-field">
+                <label>Company</label>
+                <input type="text" id="leadCompany" placeholder="Company name">
+            </div>
+            <div class="modal-field">
+                <label>LinkedIn Profile URL</label>
+                <input type="url" id="leadLinkedin" placeholder="https://linkedin.com/in/...">
+            </div>
+            <div class="modal-actions">
+                <button class="action-btn" onclick="closeModal('addLeadModal')">Cancel</button>
+                <button class="action-btn primary" onclick="addLead()">Add</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== FIND LEADS MODAL ===== -->
+    <div class="modal-overlay" id="findLeadsModal">
+        <div class="modal">
+            <h2>Find Leads</h2>
+            <div class="modal-field">
+                <label>Role / Job Title</label>
+                <input type="text" id="findRole" placeholder="e.g. VP of Infrastructure">
+            </div>
+            <div class="modal-field">
+                <label>Industry</label>
+                <input type="text" id="findIndustry" placeholder="e.g. Data Centers, Energy">
+            </div>
+            <div class="modal-field">
+                <label>Company Type</label>
+                <input type="text" id="findCompanyType" placeholder="e.g. PE fund, Hyperscaler, EPC">
+            </div>
+            <div class="modal-field">
+                <label>How many to find</label>
+                <input type="number" id="findCount" value="10" min="1" max="50">
+            </div>
+            <div id="findLeadsStep1">
+                <div class="modal-actions">
+                    <button class="action-btn" onclick="closeModal('findLeadsModal')">Cancel</button>
+                    <button class="action-btn primary" onclick="submitFindLeads()">Find</button>
+                </div>
+            </div>
+            <div id="findLeadsStep2" style="display: none;">
+                <p style="font-size: 14px; color: #555; margin-top: 16px;">Task submitted. Claude Code will pick it up automatically, search LinkedIn, and add leads to your table.</p>
+                <div class="modal-actions">
+                    <button class="action-btn" onclick="closeModal('findLeadsModal')">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== LIMITS MODAL ===== -->
+    <div class="modal-overlay" id="limitsModal">
+        <div class="modal">
+            <h2>Daily Limits</h2>
+            <div class="modal-field">
+                <label>LinkedIn connections per day</label>
+                <input type="number" id="limitLinkedin" value="20" min="1" max="100">
+            </div>
+            <div class="modal-actions">
+                <button class="action-btn" onclick="closeModal('limitsModal')">Cancel</button>
+                <button class="action-btn primary" onclick="saveLimits()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== WRITE MESSAGES MODAL ===== -->
+    <div class="modal-overlay" id="writeMessagesModal">
+        <div class="modal">
+            <h2>Write Messages</h2>
+            <p style="font-size: 14px; color: #555; margin-bottom: 16px;">Task submitted. Claude Code will pick it up automatically and write personalized LinkedIn connection notes under 300 characters for each lead.</p>
+            <div class="modal-actions">
+                <button class="action-btn" onclick="closeModal('writeMessagesModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== PERFORM OUTREACH MODAL ===== -->
+    <div class="modal-overlay" id="outreachModal">
+        <div class="modal">
+            <h2>Perform Outreach</h2>
+            <p style="font-size: 14px; color: #555; margin-bottom: 8px;" id="outreachSummary"></p>
+            <p style="font-size: 14px; color: #555; margin-bottom: 16px;">Task submitted. Claude Code will pick it up automatically, navigate to each LinkedIn profile, and send connection requests with your messages.</p>
+            <div class="modal-actions">
+                <button class="action-btn" onclick="closeModal('outreachModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+    <script>
+        firebase.initializeApp({
+            apiKey: "AIzaSyCGr-b-ftWcoEO0GxFLVcyAjA7H4zsNKGY",
+            authDomain: "thepfi.firebaseapp.com",
+            projectId: "thepfi",
+            storageBucket: "thepfi.firebasestorage.app",
+            messagingSenderId: "348991827380",
+            appId: "1:348991827380:web:6ba032bb48b5868f8e16e1",
+            measurementId: "G-PRWZNB5BDE"
+        });
+
+        const db = firebase.firestore();
+
+        let currentUser = null;
+        let selectedEmployee = null;
+        let onboardingSteps = { 2: false, 3: false, 4: false };
+        let leadsUnsubscribe = null;
+        let userSkill = '';
+
+        // ===== SCREEN ROUTING =====
+        function showScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        // Route user to the right screen based on their state
+        async function routeUser() {
+            const profileDoc = await db.collection('users').doc(currentUser.uid).collection('profile').doc('main').get();
+            const data = profileDoc.exists ? profileDoc.data() : {};
+
+            // DISABLED: auto-skip logic — always show onboarding flow for now
+            // if (!data.onboarded) {
+            //     await generateSkill();
+            //     showScreen('onboardingScreen');
+            // } else if (!data.claudeStarted) {
+            //     userSkill = data.skill || '';
+            //     buildStartCommand();
+            //     showScreen('setupScreen');
+            // } else {
+            //     userSkill = data.skill || '';
+            //     initDashboard();
+            // }
+
+            // Always start from onboarding
+            userSkill = data.skill || '';
+            await generateSkill();
+            showScreen('onboardingScreen');
+        }
+
+        // ===== LOGIN =====
+        async function loadEmployees() {
+            const doc = await db.collection('company').doc('employees').get();
+            if (!doc.exists) return;
+            const grid = document.getElementById('employeeGrid');
+            grid.innerHTML = '';
+            (doc.data().list || []).forEach(emp => {
+                const card = document.createElement('div');
+                card.className = 'employee-card';
+                card.innerHTML = `<div class="name">${emp.name}</div><div class="role">${emp.role}</div>`;
+                card.addEventListener('click', () => selectEmployee(emp, card));
+                grid.appendChild(card);
+            });
+        }
+
+        function selectEmployee(emp, card) {
+            document.querySelectorAll('.employee-card').forEach(c => c.classList.remove('selected'));
+            card.classList.add('selected');
+            selectedEmployee = emp;
+            document.getElementById('selectedName').textContent = emp.name;
+            document.getElementById('emailInput').value = '';
+            document.getElementById('emailPrompt').style.display = 'block';
+            document.getElementById('loginError').style.display = 'none';
+            document.getElementById('emailInput').focus();
+        }
+
+        async function verifyEmail() {
+            const entered = document.getElementById('emailInput').value.trim().toLowerCase();
+            if (entered === selectedEmployee.email.toLowerCase()) {
+                currentUser = { uid: selectedEmployee.email.replace(/[^a-zA-Z0-9]/g, '_'), email: selectedEmployee.email };
+                await routeUser();
+            } else {
+                const err = document.getElementById('loginError');
+                err.textContent = 'Email does not match. Try again.';
+                err.style.display = 'block';
+            }
+        }
+
+        // ===== SKILL =====
+        async function generateSkill() {
+            const configDoc = await db.collection('company').doc('config').get();
+            if (!configDoc.exists) return;
+            const template = configDoc.data().skillTemplate || '';
+            userSkill = template
+                .replace(/\{\{name\}\}/g, selectedEmployee.name)
+                .replace(/\{\{role\}\}/g, selectedEmployee.role);
+        }
+
+        // toggleSkillPreview removed — skill setup handled by Claude Code
+
+        // ===== ONBOARDING =====
+        function markStep(n) {
+            onboardingSteps[n] = true;
+            document.getElementById('stepNum' + n).classList.add('done');
+            // Step 3 (skill) is now handled by Claude Code — only need step 2
+            if (onboardingSteps[2]) {
+                document.getElementById('enterAppBtn').disabled = false;
+            }
+        }
+
+        async function completeOnboarding() {
+            await db.collection('users').doc(currentUser.uid).collection('profile').doc('main').set({
+                onboarded: true,
+                skill: userSkill,
+                name: selectedEmployee.name,
+                role: selectedEmployee.role,
+                linkedinLimit: 20
+            }, { merge: true });
+            buildStartCommand();
+            showScreen('setupScreen');
+        }
+
+        // ===== SETUP =====
+        function buildStartCommand() {
+            const uid = currentUser.uid;
+            const prompt = `You are an outreach assistant. User ID: ${uid}. On first run: call get_skill to read the skill doc, then open claude.ai/projects in Playwright, create a new project called "PFI Outreach", click + next to Instructions, paste the skill text there, and save. Then begin polling. Poll for tasks using poll_tasks every 10s. When pending: findLeads→read task criteria, use Playwright on LinkedIn to search, extract name/company/URL, call save_leads, call complete_task. writeMessages→call get_skill + get_pending_leads(needsMessage=true), write <300 char LinkedIn notes per lead, call save_message each, call complete_task. performOutreach→call get_pending_leads (with messages), get_daily_count, for each use Playwright to open LinkedIn profile and send connection request with message, call mark_lead_done, wait 3s between, stop on LIMIT_REACHED, call complete_task. If no tasks, wait 10s silently. No output between polls.`;
+
+            const cmd = document.getElementById('startCmd');
+            cmd.childNodes[0].textContent = `claude --mcp-config '{"mcpServers":{"pfi":{"command":"node","args":["Tools/mcp-server/index.js"]}}}' -p '${prompt}'`;
+        }
+
+        async function completeSetup() {
+            await db.collection('users').doc(currentUser.uid).collection('profile').doc('main').update({
+                claudeStarted: true
+            });
+            initDashboard();
+        }
+
+        // ===== DASHBOARD =====
+        function initDashboard() {
+            showScreen('dashboardScreen');
+            document.getElementById('topbarName').textContent = selectedEmployee.name;
+            updateCounter();
+            listenToLeads();
+        }
+
+        async function updateCounter() {
+            const today = new Date().toISOString().split('T')[0];
+            const key = 'linkedin_' + today;
+            const profileDoc = await db.collection('users').doc(currentUser.uid).collection('profile').doc('main').get();
+            const data = profileDoc.exists ? profileDoc.data() : {};
+            const count = data[key] || 0;
+            const limit = data.linkedinLimit || 20;
+            const el = document.getElementById('topbarCounter');
+            el.textContent = `LinkedIn: ${count} / ${limit}`;
+            el.className = 'topbar-counter';
+            if (count >= limit) el.classList.add('red');
+            else if (count >= limit * 0.8) el.classList.add('orange');
+        }
+
+        function listenToLeads() {
+            if (leadsUnsubscribe) leadsUnsubscribe();
+            const leadsRef = db.collection('users').doc(currentUser.uid).collection('leads').orderBy('createdAt', 'desc');
+            leadsUnsubscribe = leadsRef.onSnapshot(snapshot => {
+                const tbody = document.getElementById('leadTableBody');
+                const empty = document.getElementById('emptyState');
+                tbody.innerHTML = '';
+                if (snapshot.empty) { empty.style.display = 'block'; return; }
+                empty.style.display = 'none';
+                snapshot.forEach(doc => {
+                    const lead = doc.data();
+                    const isDone = lead.done === true;
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${lead.name || ''}</td>
+                        <td>${lead.company || ''}</td>
+                        <td><a class="lead-link" href="${lead.linkedin || '#'}" target="_blank">Profile</a></td>
+                        <td><textarea class="lead-message" placeholder="No message yet..." rows="1" data-id="${doc.id}">${lead.message || ''}</textarea></td>
+                        <td><span class="status-badge ${isDone ? 'done' : 'pending'}" data-id="${doc.id}">${isDone ? 'Done' : 'Pending'}</span></td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+                tbody.querySelectorAll('.lead-message').forEach(ta => {
+                    autoResize(ta);
+                    ta.addEventListener('input', () => autoResize(ta));
+                    ta.addEventListener('blur', () => {
+                        db.collection('users').doc(currentUser.uid).collection('leads').doc(ta.dataset.id).update({ message: ta.value });
+                    });
+                });
+                tbody.querySelectorAll('.status-badge.pending').forEach(badge => {
+                    badge.addEventListener('click', () => {
+                        db.collection('users').doc(currentUser.uid).collection('leads').doc(badge.dataset.id).update({
+                            done: true, sentAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        incrementDailyCount();
+                    });
+                });
+            });
+        }
+
+        function autoResize(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+
+        async function incrementDailyCount() {
+            const today = new Date().toISOString().split('T')[0];
+            await db.collection('users').doc(currentUser.uid).collection('profile').doc('main').update({
+                ['linkedin_' + today]: firebase.firestore.FieldValue.increment(1)
+            });
+            updateCounter();
+        }
+
+        // ===== ADD LEAD =====
+        function openAddLeadModal() {
+            document.getElementById('leadName').value = '';
+            document.getElementById('leadCompany').value = '';
+            document.getElementById('leadLinkedin').value = '';
+            openModal('addLeadModal');
+        }
+
+        async function addLead() {
+            const name = document.getElementById('leadName').value.trim();
+            const company = document.getElementById('leadCompany').value.trim();
+            const linkedin = document.getElementById('leadLinkedin').value.trim();
+            if (!name) return;
+            await db.collection('users').doc(currentUser.uid).collection('leads').add({
+                name, company, linkedin,
+                message: '', done: false, channel: 'linkedin',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(), sentAt: null
+            });
+            closeModal('addLeadModal');
+        }
+
+        // ===== FIND LEADS =====
+        async function openFindLeadsModal() {
+            const searchDoc = await db.collection('users').doc(currentUser.uid).collection('profile').doc('search').get();
+            if (searchDoc.exists) {
+                const s = searchDoc.data();
+                document.getElementById('findRole').value = s.role || '';
+                document.getElementById('findIndustry').value = s.industry || '';
+                document.getElementById('findCompanyType').value = s.companyType || '';
+                document.getElementById('findCount').value = s.count || 10;
+            } else {
+                document.getElementById('findRole').value = '';
+                document.getElementById('findIndustry').value = '';
+                document.getElementById('findCompanyType').value = '';
+                document.getElementById('findCount').value = 10;
+            }
+            document.getElementById('findLeadsStep1').style.display = '';
+            document.getElementById('findLeadsStep2').style.display = 'none';
+            openModal('findLeadsModal');
+        }
+
+        async function submitFindLeads() {
+            const role = document.getElementById('findRole').value.trim();
+            const industry = document.getElementById('findIndustry').value.trim();
+            const companyType = document.getElementById('findCompanyType').value.trim();
+            const count = parseInt(document.getElementById('findCount').value) || 10;
+            await db.collection('users').doc(currentUser.uid).collection('profile').doc('search').set({ role, industry, companyType, count });
+            await db.collection('users').doc(currentUser.uid).collection('tasks').doc('findLeads').set({
+                status: 'pending', role, industry, companyType, count,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            document.getElementById('findLeadsStep1').style.display = 'none';
+            document.getElementById('findLeadsStep2').style.display = '';
+        }
+
+        // ===== LIMITS =====
+        function openLimitsModal() {
+            openModal('limitsModal');
+            db.collection('users').doc(currentUser.uid).collection('profile').doc('main').get().then(doc => {
+                if (doc.exists) document.getElementById('limitLinkedin').value = doc.data().linkedinLimit || 20;
+            });
+        }
+
+        async function saveLimits() {
+            const limit = parseInt(document.getElementById('limitLinkedin').value) || 20;
+            await db.collection('users').doc(currentUser.uid).collection('profile').doc('main').update({ linkedinLimit: limit });
+            updateCounter();
+            closeModal('limitsModal');
+        }
+
+        // ===== WRITE MESSAGES =====
+        async function openWriteMessagesModal() {
+            await db.collection('users').doc(currentUser.uid).collection('tasks').doc('writeMessages').set({
+                status: 'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            openModal('writeMessagesModal');
+        }
+
+        // ===== PERFORM OUTREACH =====
+        async function openOutreachModal() {
+            const snapshot = await db.collection('users').doc(currentUser.uid).collection('leads').where('done', '==', false).get();
+            let ready = 0;
+            snapshot.forEach(doc => { if (doc.data().message) ready++; });
+            document.getElementById('outreachSummary').textContent = `${ready} lead${ready !== 1 ? 's' : ''} ready to send.`;
+            await db.collection('users').doc(currentUser.uid).collection('tasks').doc('performOutreach').set({
+                status: 'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            openModal('outreachModal');
+        }
+
+        // ===== MODAL HELPERS =====
+        function openModal(id) { document.getElementById(id).classList.add('active'); }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', e => { if (e.target === overlay) overlay.classList.remove('active'); });
+        });
+
+        // ===== COPY =====
+        function copyText(elId) {
+            const el = document.getElementById(elId);
+            const text = el.textContent.replace('Copy', '').replace('Copy Skill', '').trim();
+            navigator.clipboard.writeText(text);
+            const btn = el.querySelector('.copy-btn');
+            if (btn) { btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy', 1500); }
+        }
+
+        // ===== SIGN OUT =====
+        function signOut() {
+            if (leadsUnsubscribe) leadsUnsubscribe();
+            currentUser = null;
+            selectedEmployee = null;
+            showScreen('loginScreen');
+        }
+
+        // ===== INIT =====
+        loadEmployees();
+        document.getElementById('emailInput').addEventListener('keydown', e => {
+            if (e.key === 'Enter') verifyEmail();
+        });
+    </script>
+
+</body>
+</html>

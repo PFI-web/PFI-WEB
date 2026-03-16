@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Company data — readable by anyone, writable only via console
+    match /company/{document=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // User data — open for now (internal tool, no public access)
+    match /users/{userId}/{document=**} {
+      allow read, write: if true;
+    }
+  }
+}
