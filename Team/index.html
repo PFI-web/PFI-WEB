@@ -134,17 +134,6 @@
         }
 
         /* ===== SETUP SCREEN ===== */
-        .setup-content {
-            max-width: 800px;
-            width: 100%;
-            text-align: center;
-        }
-        .setup-content p {
-            font-size: 15px;
-            color: #555;
-            margin-bottom: 16px;
-            text-align: left;
-        }
 
         /* ===== DASHBOARD ===== */
         .dashboard-screen {
@@ -250,20 +239,33 @@
         .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
 
         /* Command block */
+        .setup-step {
+            max-width: 720px; width: 100%; margin-bottom: 32px; text-align: left;
+        }
+        .setup-step-label {
+            font-size: 14px; font-weight: 600; color: #1C2B3A; margin-bottom: 8px;
+        }
+        .setup-step-label span {
+            display: inline-block; width: 24px; height: 24px; line-height: 24px;
+            text-align: center; background: #1C2B3A; color: #FFF;
+            border-radius: 50%; font-size: 12px; margin-right: 8px;
+        }
         .command-block {
             background: #1C2B3A; color: #E0E0E0;
             font-family: monospace; font-size: 13px;
-            padding: 16px 40px 16px 16px; border-radius: 6px; margin: 16px 0;
-            word-break: break-all; line-height: 1.5; position: relative;
+            padding: 16px; padding-right: 16px; border-radius: 8px;
+            word-wrap: break-word; line-height: 1.6;
+        }
+        .copy-row {
+            display: flex; justify-content: flex-end; margin-top: 8px;
         }
         .copy-btn {
-            position: absolute; top: 8px; right: 8px;
-            font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600;
-            padding: 4px 10px;
-            border: 1px solid rgba(255,255,255,0.2); border-radius: 4px;
-            background: transparent; color: #AAA; cursor: pointer;
+            font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600;
+            padding: 6px 14px;
+            border: 1px solid #DDD; border-radius: 6px;
+            background: #FFF; color: #555; cursor: pointer;
         }
-        .copy-btn:hover { color: #FFF; border-color: rgba(255,255,255,0.4); }
+        .copy-btn:hover { border-color: #1C2B3A; color: #1C2B3A; }
 
         /* ===== RESPONSIVE ===== */
         @media (max-width: 768px) {
@@ -338,14 +340,23 @@
     </div>
 
     <!-- ===== SCREEN 3: SETUP (Start Claude Code) ===== -->
-    <div id="setupScreen" class="screen centered-screen">
+    <div id="setupScreen" class="screen centered-screen" style="justify-content: flex-start; padding-top: 80px;">
         <h1 class="screen-title">Start Claude Code</h1>
-        <p class="screen-subtitle">One command to connect everything</p>
-        <div class="setup-content">
-            <p>Paste this into your terminal. Claude Code will start, connect to the system, and wait for tasks. Leave the terminal open.</p>
-            <div class="command-block" id="startCmd" style="margin-bottom: 0;"><button class="copy-btn" onclick="copyText('startCmd')">Copy</button></div>
+        <p class="screen-subtitle">Two steps to connect everything</p>
+
+        <div class="setup-step">
+            <div class="setup-step-label"><span>1</span> Paste into your terminal</div>
+            <div class="command-block" id="startCmd"></div>
+            <div class="copy-row"><button class="copy-btn" onclick="copyText('startCmd')">Copy</button></div>
         </div>
-        <button class="primary-btn visible" style="margin-top: 40px;" onclick="completeSetup()">I've Started Claude Code</button>
+
+        <div class="setup-step">
+            <div class="setup-step-label"><span>2</span> Once Claude Code opens, paste this and press Enter</div>
+            <div class="command-block" id="promptCmd"></div>
+            <div class="copy-row"><button class="copy-btn" onclick="copyText('promptCmd')">Copy</button></div>
+        </div>
+
+        <button class="primary-btn visible" onclick="completeSetup()">I've Started Claude Code</button>
     </div>
 
     <!-- ===== SCREEN 4: DASHBOARD ===== -->
@@ -608,10 +619,8 @@
         // ===== SETUP =====
         function buildStartCommand() {
             const uid = currentUser.uid;
-            const prompt = `You are an outreach assistant. User ID: ${uid}. On first run: call get_skill to read the skill doc, then open claude.ai/projects in Playwright, create a new project called "PFI Outreach", click + next to Instructions, paste the skill text there, and save. Then begin polling. Poll for tasks using poll_tasks every 10s. When pending: findLeads→read task criteria, use Playwright on LinkedIn to search, extract name/company/URL, call save_leads, call complete_task. writeMessages→call get_skill + get_pending_leads(needsMessage=true), write <300 char LinkedIn notes per lead, call save_message each, call complete_task. performOutreach→call get_pending_leads (with messages), get_daily_count, for each use Playwright to open LinkedIn profile and send connection request with message, call mark_lead_done, wait 3s between, stop on LIMIT_REACHED, call complete_task. If no tasks, wait 10s silently. No output between polls.`;
-
-            const cmd = document.getElementById('startCmd');
-            cmd.childNodes[0].textContent = `claude --mcp-config '{"mcpServers":{"pfi":{"command":"node","args":["Tools/mcp-server/index.js"]}}}' -p '${prompt}'`;
+            document.getElementById('startCmd').textContent = `cd ~/development/PFI && claude --dangerously-skip-permissions --mcp-config '{"mcpServers":{"pfi":{"command":"node","args":["Tools/mcp-server/index.js"]}}}'`;
+            document.getElementById('promptCmd').textContent = `Read Tools/outreach-agent.md and begin. User ID: ${uid}`;
         }
 
         async function completeSetup() {
@@ -793,10 +802,12 @@
         // ===== COPY =====
         function copyText(elId) {
             const el = document.getElementById(elId);
-            const text = el.textContent.replace('Copy', '').replace('Copy Skill', '').trim();
+            const text = el.textContent.trim();
             navigator.clipboard.writeText(text);
-            const btn = el.querySelector('.copy-btn');
-            if (btn) { btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy', 1500); }
+            const btn = el.closest ? el.parentElement.querySelector('.copy-btn') : null;
+            const rowBtn = el.nextElementSibling?.querySelector('.copy-btn');
+            const targetBtn = rowBtn || btn;
+            if (targetBtn) { targetBtn.textContent = 'Copied!'; setTimeout(() => targetBtn.textContent = 'Copy', 1500); }
         }
 
         // ===== SIGN OUT =====
