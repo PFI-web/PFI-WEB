@@ -400,6 +400,7 @@
                 <button class="action-btn" onclick="openAddLeadModal()">Add Lead</button>
                 <button class="action-btn" onclick="openWriteMessagesModal()">Write Messages</button>
                 <button class="action-btn primary" onclick="openOutreachModal()">Perform Outreach</button>
+                <button class="action-btn" onclick="openProofSheetModal()">Proof Sheet</button>
             </div>
             <table class="lead-table" id="leadTable">
                 <thead>
@@ -533,6 +534,48 @@
             <div class="modal-actions">
                 <button class="action-btn" onclick="closeModal('messageModal')">Cancel</button>
                 <button class="action-btn primary" onclick="saveMessageModal()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== PROOF SHEET MODAL ===== -->
+    <div class="modal-overlay" id="proofSheetModal">
+        <div class="modal">
+            <h2>Proof Sheet</h2>
+            <div id="proofSheetStep1">
+                <p style="font-size: 14px; color: #555; margin-bottom: 20px;">Run the lead discovery pipeline and write results to a Google Sheet for cross-checking.</p>
+                <div style="font-size: 13px; color: #333; line-height: 2;">
+                    <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #F0F0F0;">
+                        <span style="width: 22px; height: 22px; border-radius: 50%; background: #1C2B3A; color: #FFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">1</span>
+                        <span><strong>Web Search</strong> — Discover companies via permit filings &amp; news</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #F0F0F0;">
+                        <span style="width: 22px; height: 22px; border-radius: 50%; background: #1C2B3A; color: #FFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">2</span>
+                        <span><strong>Identify People</strong> — Find permitting &amp; development leads at each company</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #F0F0F0;">
+                        <span style="width: 22px; height: 22px; border-radius: 50%; background: #1C2B3A; color: #FFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">3</span>
+                        <span><strong>Enrich</strong> — Attempt email lookup via Hunter.io</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0;">
+                        <span style="width: 22px; height: 22px; border-radius: 50%; background: #1C2B3A; color: #FFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">4</span>
+                        <span><strong>Write to Sheet</strong> — Results go to Google Sheets (not the dashboard)</span>
+                    </div>
+                </div>
+                <div class="modal-field" style="margin-top: 20px;">
+                    <label>How many companies to find</label>
+                    <input type="number" id="proofCount" value="10" min="1" max="50">
+                </div>
+                <div class="modal-actions">
+                    <button class="action-btn" onclick="closeModal('proofSheetModal')">Cancel</button>
+                    <button class="action-btn primary" onclick="submitProofSheet()">Start</button>
+                </div>
+            </div>
+            <div id="proofSheetStep2" style="display: none;">
+                <p style="font-size: 14px; color: #555; margin-top: 16px;">Pipeline started. Claude Code is searching the web and will write results directly to the Google Sheet.</p>
+                <div class="modal-actions">
+                    <button class="action-btn" onclick="closeModal('proofSheetModal')">Close</button>
+                </div>
             </div>
         </div>
     </div>
@@ -932,6 +975,24 @@
                 status: 'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
             openModal('outreachModal');
+        }
+
+        // ===== PROOF SHEET =====
+        function openProofSheetModal() {
+            document.getElementById('proofSheetStep1').style.display = '';
+            document.getElementById('proofSheetStep2').style.display = 'none';
+            openModal('proofSheetModal');
+        }
+
+        async function submitProofSheet() {
+            const count = parseInt(document.getElementById('proofCount').value) || 10;
+            const spreadsheetId = '1VjCQBw86I8vTTbqyJ8EyJI4XnbaZbnge2ihGsDud2uI';
+            await tasksCol().doc('proofSheet').set({
+                status: 'pending', count, spreadsheetId,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            document.getElementById('proofSheetStep1').style.display = 'none';
+            document.getElementById('proofSheetStep2').style.display = '';
         }
 
         // ===== MODAL HELPERS =====

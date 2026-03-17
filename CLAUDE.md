@@ -57,7 +57,7 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 1. **Login** — Employee name cards from Firestore. Click a name → enter email → matched against `company/employees`
 2. **Onboarding** (first time only) — Install Claude Code, set up skill
 3. **Setup** — Two terminal commands: start Claude Code with MCP server, then paste polling prompt
-4. **Dashboard** — Lead table, action buttons (Find Leads, Add Lead, Write Messages, Perform Outreach)
+4. **Dashboard** — Lead table, action buttons (Find Leads, Add Lead, Write Messages, Perform Outreach, Proof Sheet)
 
 ### Architecture
 - **Portal** writes tasks to `users/{uid}/tasks/` in Firestore
@@ -71,6 +71,15 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 3. For each person: **always** get LinkedIn profile via Playwright, **then** try Hunter for email
 4. Email found → `channel: 'email'`, lead has both email + LinkedIn | No email → `channel: 'linkedin'`, LinkedIn only
 5. **Outreach**: Agent sends emails via Gmail SMTP only. LinkedIn connection requests are **manual** — user sends them and clicks the LinkedIn icon in the dashboard to mark complete.
+
+### Proof Sheet (Boss Cross-Check)
+- **"Proof Sheet" button** on dashboard — runs the same lead discovery pipeline but writes to a Google Sheet instead of the leads database
+- Modal: count input + Google Sheet URL/ID input
+- Task type: `proofSheet` with `{ status, count, spreadsheetId, createdAt }`
+- Google Sheet columns: Company/Firm Name, Reason for Picking + Source, Project They Are Doing, Agents Found
+- The "Agents Found" column lists the people the system would have added as leads (name, role, email, LinkedIn)
+- Google Sheet must be shared with `firebase-adminsdk-fbsvc@thepfi.iam.gserviceaccount.com`
+- Uses `googleapis` npm package with the Firebase service account credentials
 
 ### Dual-Channel Tracking
 - Leads can have email, LinkedIn, or both contact methods
@@ -88,7 +97,7 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - **Not used for sending connection requests** — that's manual
 
 ### MCP Server (`Tools/mcp-server/index.js`)
-11 tools exposed:
+12 tools exposed:
 - `search_web(query)` — Tavily API web search, returns structured results
 - `enrich_contact(firstName, lastName, domain)` — Hunter email finder, returns email or null
 - `send_email(userId, leadId, to, subject, body)` — Gmail SMTP send, sets `emailSent: true`, only sets `done: true` if LinkedIn is also complete (or not applicable). Enforces daily email limit
@@ -100,6 +109,7 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - `get_daily_count(userId)` — Today's LinkedIn + email counts, limits, and remaining
 - `poll_tasks(userId)` — Check for pending tasks
 - `complete_task(userId, taskName)` — Mark task as complete
+- `write_proof_sheet(spreadsheetId, rows[])` — Append rows to a Google Sheet. Each row: `{ company, reason, project, agents }`. Auto-adds header row if sheet is empty.
 
 ### Environment Variables (MCP Server)
 - `TAVILY_API_KEY` — Tavily web search
@@ -112,7 +122,7 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - `company/config` — `{ skillTemplate: "..." }` with `{{name}}` and `{{role}}` placeholders
 - `users/{uid}/profile/main` — `{ onboarded, skill, name, role, linkedinLimit, emailLimit, linkedin_YYYY-MM-DD, email_YYYY-MM-DD, claudeStarted }`
 - `users/{uid}/leads/{leadId}` — `{ name, company, role, linkedin, email, channel, enrichmentSource, message, emailSubject, linkedinNote, emailSent, emailSentAt, linkedinSent, linkedinSentAt, done, createdAt, sentAt }`
-- `users/{uid}/tasks/{taskName}` — `{ status: "pending"|"complete", createdAt }`
+- `users/{uid}/tasks/{taskName}` — `{ status: "pending"|"complete", createdAt }`. Task names: `findLeads` (+ count), `writeMessages`, `performOutreach`, `proofSheet` (+ count, spreadsheetId)
 
 ### Testing Mode
 **Currently active.** Both `Tools/mcp-server/index.js` and `Team/index.html` have a `ROOT_COLLECTION` constant set to `'test'` instead of `'users'`. This routes all reads/writes to the `test` Firestore collection. Test data seeded via `Tools/seed/seed-test.js`. **Switch back to `'users'` in both files when done testing.**

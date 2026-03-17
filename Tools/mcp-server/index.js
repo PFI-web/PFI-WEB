@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import admin from 'firebase-admin';
 import nodemailer from 'nodemailer';
+import { google } from 'googleapis';
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -27,6 +28,19 @@ const tasksRef = (uid) => userRef(uid).collection('tasks');
 const textResult = (text) => ({ content: [{ type: 'text', text }] });
 const todayKey = () => 'linkedin_' + new Date().toISOString().split('T')[0];
 const emailTodayKey = () => 'email_' + new Date().toISOString().split('T')[0];
+
+// Google Sheets client (lazy-initialized)
+let sheetsClient = null;
+function getSheetsClient() {
+    if (!sheetsClient) {
+        const auth = new google.auth.GoogleAuth({
+            credentials: serviceAccount,
+            scopes: ['https://www.googleapis.com/auth/spreadsheets']
+        });
+        sheetsClient = google.sheets({ version: 'v4', auth });
+    }
+    return sheetsClient;
+}
 
 // Gmail SMTP transport (lazy-initialized)
 let mailTransport = null;
@@ -324,7 +338,7 @@ server.tool(
     'Check for pending tasks. Returns the task type if one is pending, or "none".',
     { userId: z.string().describe('Firebase user ID') },
     async ({ userId }) => {
-        const tasks = ['findLeads', 'writeMessages', 'performOutreach'];
+        const tasks = ['findLeads', 'writeMessages', 'performOutreach', 'proofSheet'];
         for (const taskName of tasks) {
             const doc = await tasksRef(userId).doc(taskName).get();
             if (doc.exists && doc.data().status === 'pending') {
@@ -349,6 +363,52 @@ server.tool(
             completedAt: admin.firestore.FieldValue.serverTimestamp()
         });
         return textResult(`Task ${taskName} marked complete.`);
+    }
+);
+
+// ===== write_proof_sheet =====
+server.tool(
+    'write_proof_sheet',
+    'Write proof-of-concept rows to a Google Sheet. Appends rows with columns: Company/Firm Name, Reason for Picking + Source, Project They Are Doing, Agents Found. The sheet must be shared with the Firebase service account.',
+    {
+        spreadsheetId: z.string().describe('Google Sheet ID (from the URL)'),
+        rows: z.array(z.object({
+            company: z.string().describe('Company or firm name'),
+            reason: z.string().describe('Why this company was picked + source URL'),
+            project: z.string().describe('The project they are working on'),
+            agents: z.string().describe('People found: names, roles, and contact info that would be saved as leads')
+        })).describe('Array of rows to append')
+    },
+    async ({ spreadsheetId, rows }) => {
+        try {
+            const sheets = getSheetsClient();
+            // Check if header row exists
+            const existing = await sheets.spreadsheets.values.get({
+                spreadsheetId,
+                range: 'A1:D1'
+            }).catch(() => null);
+
+            const values = [];
+            if (!existing || !existing.data.values || existing.data.values.length === 0) {
+                values.push(['Company / Firm Name', 'Reason for Picking + Source', 'Project They Are Doing', 'Agents Found']);
+            }
+
+            for (const row of rows) {
+                values.push([row.company, row.reason, row.project, row.agents]);
+            }
+
+            await sheets.spreadsheets.values.append({
+                spreadsheetId,
+                range: 'A1',
+                valueInputOption: 'RAW',
+                insertDataOption: 'INSERT_ROWS',
+                requestBody: { values }
+            });
+
+            return textResult(`Wrote ${rows.length} rows to the Google Sheet.`);
+        } catch (err) {
+            return textResult(`ERROR writing to Google Sheet: ${err.message}`);
+        }
     }
 );
 
