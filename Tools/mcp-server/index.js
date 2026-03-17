@@ -24,6 +24,7 @@ const leadsRef = (uid) => userRef(uid).collection('leads');
 const tasksRef = (uid) => userRef(uid).collection('tasks');
 const textResult = (text) => ({ content: [{ type: 'text', text }] });
 const todayKey = () => 'linkedin_' + new Date().toISOString().split('T')[0];
+const emailTodayKey = () => 'email_' + new Date().toISOString().split('T')[0];
 
 // Gmail SMTP transport (lazy-initialized)
 let mailTransport = null;
@@ -103,6 +104,17 @@ server.tool(
     async ({ userId, leadId, to, subject, body }) => {
         const transport = getMailTransport();
         if (!transport) return textResult('ERROR: Gmail not configured. Set GMAIL_USER and GMAIL_APP_PASSWORD.');
+
+        // Check email daily limit
+        const key = emailTodayKey();
+        const profileDoc = await profileRef(userId).get();
+        const data = profileDoc.exists ? profileDoc.data() : {};
+        const count = data[key] || 0;
+        const limit = data.emailLimit || 20;
+        if (count >= limit) {
+            return textResult(`LIMIT_REACHED: Daily email limit of ${limit} hit. Stop sending.`);
+        }
+
         try {
             await transport.sendMail({
                 from: process.env.GMAIL_USER,
@@ -110,16 +122,14 @@ server.tool(
                 subject,
                 text: body
             });
-            // Mark lead as done after successful send
             await leadsRef(userId).doc(leadId).update({
                 done: true,
                 sentAt: admin.firestore.FieldValue.serverTimestamp()
             });
-            const key = todayKey();
             await profileRef(userId).update({
                 [key]: admin.firestore.FieldValue.increment(1)
             });
-            return textResult(`Email sent to ${to}. Lead ${leadId} marked done.`);
+            return textResult(`Email sent to ${to}. Lead ${leadId} marked done. Count: ${count + 1}/${limit}.`);
         } catch (err) {
             return textResult(`ERROR sending email: ${err.message}`);
         }
@@ -263,15 +273,19 @@ server.tool(
 // ===== get_daily_count =====
 server.tool(
     'get_daily_count',
-    'Get today\'s LinkedIn send count and the daily limit',
+    'Get today\'s LinkedIn and email send counts and daily limits',
     { userId: z.string().describe('Firebase user ID') },
     async ({ userId }) => {
-        const key = todayKey();
         const doc = await profileRef(userId).get();
         const data = doc.exists ? doc.data() : {};
-        const count = data[key] || 0;
-        const limit = data.linkedinLimit || 20;
-        return textResult(JSON.stringify({ count, limit, remaining: limit - count }));
+        const liCount = data[todayKey()] || 0;
+        const liLimit = data.linkedinLimit || 20;
+        const emCount = data[emailTodayKey()] || 0;
+        const emLimit = data.emailLimit || 20;
+        return textResult(JSON.stringify({
+            linkedin: { count: liCount, limit: liLimit, remaining: liLimit - liCount },
+            email: { count: emCount, limit: emLimit, remaining: emLimit - emCount }
+        }));
     }
 );
 

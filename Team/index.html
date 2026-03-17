@@ -408,6 +408,10 @@
                 <input type="text" id="leadCompany" placeholder="Company name">
             </div>
             <div class="modal-field">
+                <label>Email</label>
+                <input type="email" id="leadEmail" placeholder="name@company.com">
+            </div>
+            <div class="modal-field">
                 <label>LinkedIn Profile URL</label>
                 <input type="url" id="leadLinkedin" placeholder="https://linkedin.com/in/...">
             </div>
@@ -422,30 +426,37 @@
     <div class="modal-overlay" id="findLeadsModal">
         <div class="modal">
             <h2>Find Leads</h2>
-            <div class="modal-field">
-                <label>Role / Job Title</label>
-                <input type="text" id="findRole" placeholder="e.g. VP of Infrastructure">
-            </div>
-            <div class="modal-field">
-                <label>Industry</label>
-                <input type="text" id="findIndustry" placeholder="e.g. Data Centers, Energy">
-            </div>
-            <div class="modal-field">
-                <label>Company Type</label>
-                <input type="text" id="findCompanyType" placeholder="e.g. PE fund, Hyperscaler, EPC">
-            </div>
-            <div class="modal-field">
-                <label>How many to find</label>
-                <input type="number" id="findCount" value="10" min="1" max="50">
-            </div>
             <div id="findLeadsStep1">
+                <p style="font-size: 14px; color: #555; margin-bottom: 20px;">The agent will run the following pipeline:</p>
+                <div style="font-size: 13px; color: #333; line-height: 2;">
+                    <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #F0F0F0;">
+                        <span style="width: 22px; height: 22px; border-radius: 50%; background: #1C2B3A; color: #FFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">1</span>
+                        <span><strong>Web Search</strong> — Discover companies via permit filings, FERC queues, and news</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #F0F0F0;">
+                        <span style="width: 22px; height: 22px; border-radius: 50%; background: #1C2B3A; color: #FFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">2</span>
+                        <span><strong>Identify People</strong> — Find execs, infrastructure & permitting leads</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #F0F0F0;">
+                        <span style="width: 22px; height: 22px; border-radius: 50%; background: #1C2B3A; color: #FFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">3</span>
+                        <span><strong>Enrich Email</strong> — Hunter.io lookup by name + company domain</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0;">
+                        <span style="width: 22px; height: 22px; border-radius: 50%; background: #1C2B3A; color: #FFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">4</span>
+                        <span><strong>Fallback</strong> — LinkedIn profile search if no email found</span>
+                    </div>
+                </div>
+                <div class="modal-field" style="margin-top: 20px;">
+                    <label>How many leads</label>
+                    <input type="number" id="findCount" value="10" min="1" max="50">
+                </div>
                 <div class="modal-actions">
                     <button class="action-btn" onclick="closeModal('findLeadsModal')">Cancel</button>
-                    <button class="action-btn primary" onclick="submitFindLeads()">Find</button>
+                    <button class="action-btn primary" onclick="submitFindLeads()">Start</button>
                 </div>
             </div>
             <div id="findLeadsStep2" style="display: none;">
-                <p style="font-size: 14px; color: #555; margin-top: 16px;">Task submitted. Claude Code will search the web for matching companies and contacts, enrich emails via Hunter, and fall back to LinkedIn for contacts without email.</p>
+                <p style="font-size: 14px; color: #555; margin-top: 16px;">Pipeline started. Claude Code is searching the web, enriching contacts, and will add leads to your table automatically.</p>
                 <div class="modal-actions">
                     <button class="action-btn" onclick="closeModal('findLeadsModal')">Close</button>
                 </div>
@@ -626,7 +637,7 @@
         // ===== SETUP =====
         function buildStartCommand() {
             const uid = currentUser.uid;
-            document.getElementById('startCmd').textContent = `cd ~/development/PFI && claude --dangerously-skip-permissions --mcp-config '{"mcpServers":{"pfi":{"command":"node","args":["Tools/mcp-server/index.js"]}}}'`;
+            document.getElementById('startCmd').textContent = `cd ~/development/PFI && claude --dangerously-skip-permissions --mcp-config '{"mcpServers":{"pfi":{"command":"node","args":["Tools/mcp-server/index.js"],"env":{"TAVILY_API_KEY":"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","HUNTER_API_KEY":"2a84f8211f4137f7d71cd6441a3abc14bb1c0166","GMAIL_USER":"ap@permitfriction.com","GMAIL_APP_PASSWORD":"kmwx wopw jhnf izpz"}}}}'`;
             document.getElementById('promptCmd').textContent = `Read Tools/outreach-agent.md and begin. User ID: ${uid}`;
         }
 
@@ -645,16 +656,18 @@
 
         async function updateCounter() {
             const today = new Date().toISOString().split('T')[0];
-            const key = 'linkedin_' + today;
             const profile = await profileDoc().get();
             const data = profile.exists ? profile.data() : {};
-            const count = data[key] || 0;
-            const limit = data.linkedinLimit || 20;
+            const liCount = data['linkedin_' + today] || 0;
+            const liLimit = data.linkedinLimit || 20;
+            const emCount = data['email_' + today] || 0;
+            const emLimit = data.emailLimit || 20;
             const el = document.getElementById('topbarCounter');
-            el.textContent = `LinkedIn: ${count} / ${limit}`;
+            el.textContent = `LinkedIn: ${liCount}/${liLimit}  ·  Email: ${emCount}/${emLimit}`;
             el.className = 'topbar-counter';
-            if (count >= limit) el.classList.add('red');
-            else if (count >= limit * 0.8) el.classList.add('orange');
+            const totalPct = Math.max(liCount / liLimit, emCount / emLimit);
+            if (totalPct >= 1) el.classList.add('red');
+            else if (totalPct >= 0.8) el.classList.add('orange');
         }
 
         function listenToLeads() {
@@ -671,9 +684,10 @@
                     const isDone = lead.done === true;
                     const tr = document.createElement('tr');
                     const ch = lead.channel || 'linkedin';
-                    const contactLink = ch === 'email'
-                        ? `<span style="font-size:13px;color:#333;">${lead.email}</span>`
-                        : `<a class="lead-link" href="${lead.linkedin || '#'}" target="_blank">Profile</a>`;
+                    let contactParts = [];
+                    if (lead.email) contactParts.push(`<span style="font-size:13px;color:#333;">${lead.email}</span>`);
+                    if (lead.linkedin) contactParts.push(`<a class="lead-link" href="${lead.linkedin}" target="_blank">LinkedIn</a>`);
+                    const contactLink = contactParts.join(' · ') || '—';
                     tr.innerHTML = `
                         <td>${lead.name || ''}</td>
                         <td>${lead.company || ''}</td>
@@ -716,6 +730,7 @@
         function openAddLeadModal() {
             document.getElementById('leadName').value = '';
             document.getElementById('leadCompany').value = '';
+            document.getElementById('leadEmail').value = '';
             document.getElementById('leadLinkedin').value = '';
             openModal('addLeadModal');
         }
@@ -723,44 +738,30 @@
         async function addLead() {
             const name = document.getElementById('leadName').value.trim();
             const company = document.getElementById('leadCompany').value.trim();
+            const email = document.getElementById('leadEmail').value.trim();
             const linkedin = document.getElementById('leadLinkedin').value.trim();
             if (!name) return;
             await leadsCol().add({
-                name, company, linkedin,
-                message: '', done: false, channel: 'linkedin',
+                name, company, email, linkedin,
+                message: '', done: false,
+                channel: email ? 'email' : 'linkedin',
+                enrichmentSource: 'none',
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(), sentAt: null
             });
             closeModal('addLeadModal');
         }
 
         // ===== FIND LEADS =====
-        async function openFindLeadsModal() {
-            const searchDoc = await userDoc().collection('profile').doc('search').get();
-            if (searchDoc.exists) {
-                const s = searchDoc.data();
-                document.getElementById('findRole').value = s.role || '';
-                document.getElementById('findIndustry').value = s.industry || '';
-                document.getElementById('findCompanyType').value = s.companyType || '';
-                document.getElementById('findCount').value = s.count || 10;
-            } else {
-                document.getElementById('findRole').value = '';
-                document.getElementById('findIndustry').value = '';
-                document.getElementById('findCompanyType').value = '';
-                document.getElementById('findCount').value = 10;
-            }
+        function openFindLeadsModal() {
             document.getElementById('findLeadsStep1').style.display = '';
             document.getElementById('findLeadsStep2').style.display = 'none';
             openModal('findLeadsModal');
         }
 
         async function submitFindLeads() {
-            const role = document.getElementById('findRole').value.trim();
-            const industry = document.getElementById('findIndustry').value.trim();
-            const companyType = document.getElementById('findCompanyType').value.trim();
             const count = parseInt(document.getElementById('findCount').value) || 10;
-            await userDoc().collection('profile').doc('search').set({ role, industry, companyType, count });
             await tasksCol().doc('findLeads').set({
-                status: 'pending', role, industry, companyType, count,
+                status: 'pending', count,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
             document.getElementById('findLeadsStep1').style.display = 'none';

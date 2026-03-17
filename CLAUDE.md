@@ -49,13 +49,13 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - Single `Team/index.html` file with inline CSS and JS
 - Firebase (Firestore) for data — project: `thepfi`
 - MCP server (`Tools/mcp-server/`) bridging Claude Code ↔ Firestore
-- Claude Code + Playwright for LinkedIn automation
+- Claude Code + Playwright for LinkedIn automation (persistent session at `~/.pfi-linkedin-session/`)
 - No Firebase Auth — simple email-based login matching against employee list in Firestore
 
 ### Screen Flow (4 screens, sequential)
 1. **Login** — Employee name cards from Firestore. Click a name → enter email → matched against `company/employees`
-2. **Onboarding** (first time only) — Install Claude Code, open LinkedIn
-3. **Setup** — Single terminal command to start Claude Code with MCP server + polling prompt
+2. **Onboarding** (first time only) — Install Claude Code, set up skill
+3. **Setup** — Two terminal commands: start Claude Code with MCP server, then paste polling prompt
 4. **Dashboard** — Lead table, action buttons (Find Leads, Add Lead, Write Messages, Perform Outreach)
 
 ### Architecture
@@ -66,22 +66,29 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 
 ### Lead Discovery & Outreach Flow
 1. **Find Leads** → Tavily web search (API, no browser) discovers companies/projects
-2. Agent identifies key people at target companies
-3. **Hunter** tries to find verified email for each person
-4. Email found → `channel: 'email'` | No email → Playwright searches LinkedIn → `channel: 'linkedin'`
+2. Agent identifies key people at target companies (permitting/development roles, not operators)
+3. For each person: **always** get LinkedIn profile via Playwright, **then** try Hunter for email
+4. Email found → `channel: 'email'`, lead has both email + LinkedIn | No email → `channel: 'linkedin'`, LinkedIn only
 5. **Outreach**: email leads sent via Gmail SMTP, LinkedIn leads sent via Playwright
+
+### Playwright / LinkedIn Session
+- Uses persistent browser context saved at `~/.pfi-linkedin-session/`
+- On agent startup, verifies LinkedIn session is active (navigates to feed)
+- First time only: user logs into LinkedIn manually in the Playwright browser window
+- Session persists across agent restarts — no Chrome debug port needed
+- Agent must always use `chromium.launchPersistentContext()`, never `chromium.launch()` or CDP
 
 ### MCP Server (`Tools/mcp-server/index.js`)
 11 tools exposed:
 - `search_web(query)` — Tavily API web search, returns structured results
 - `enrich_contact(firstName, lastName, domain)` — Hunter email finder, returns email or null
-- `send_email(userId, leadId, to, subject, body)` — Gmail SMTP send, auto-marks lead done
+- `send_email(userId, leadId, to, subject, body)` — Gmail SMTP send, auto-marks lead done, enforces daily email limit
 - `get_skill(userId)` — Read user's skill document
 - `get_pending_leads(userId, needsMessage?)` — Get leads where done=false
 - `save_leads(userId, leads[])` — Save new leads with dedup by LinkedIn URL and email
 - `save_message(userId, leadId, message)` — Save message to a lead
 - `mark_lead_done(userId, leadId)` — Set done=true, sentAt, increment daily counter, enforce limit
-- `get_daily_count(userId)` — Today's count + limit + remaining
+- `get_daily_count(userId)` — Today's LinkedIn + email counts, limits, and remaining
 - `poll_tasks(userId)` — Check for pending tasks
 - `complete_task(userId, taskName)` — Mark task as complete
 
@@ -94,8 +101,7 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 ### Firestore Data Model
 - `company/employees` — `{ list: [{ name, role, email }] }`
 - `company/config` — `{ skillTemplate: "..." }` with `{{name}}` and `{{role}}` placeholders
-- `users/{uid}/profile/main` — `{ onboarded, skill, name, role, linkedinLimit, linkedin_YYYY-MM-DD, claudeStarted }`
-- `users/{uid}/profile/search` — `{ role, industry, companyType, count }` (persisted search criteria)
+- `users/{uid}/profile/main` — `{ onboarded, skill, name, role, linkedinLimit, emailLimit, linkedin_YYYY-MM-DD, email_YYYY-MM-DD, claudeStarted }`
 - `users/{uid}/leads/{leadId}` — `{ name, company, role, linkedin, email, channel, enrichmentSource, message, done, createdAt, sentAt }`
 - `users/{uid}/tasks/{taskName}` — `{ status: "pending"|"complete", createdAt }`
 
@@ -107,7 +113,7 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 Master skill template in `company/config` gets personalized per user (replace `{{name}}` and `{{role}}`). Claude Code sets up the Claude Project with instructions automatically on first run.
 
 ### Daily Limits
-Default: 20 LinkedIn connections/day. Stored as `linkedin_YYYY-MM-DD` fields. Top bar color: gray (safe) → orange (80%) → red (at limit). `mark_lead_done` enforces server-side.
+Default: 20/day for both LinkedIn and email (separate counters). Stored as `linkedin_YYYY-MM-DD` and `email_YYYY-MM-DD` fields. Top bar shows both counters. Color: gray (safe) → orange (80%) → red (at limit). `mark_lead_done` enforces LinkedIn limit server-side, `send_email` enforces email limit server-side.
 
 ## Assets
 - Images live in `assets/`
@@ -126,6 +132,7 @@ PFI/
 │   ├── seed/
 │   │   ├── seed.js               # Firestore seed script
 │   │   └── package.json
+│   ├── outreach-agent.md          # Agent instructions (polling, task handlers, Playwright rules)
 │   ├── Outreach.md               # System description
 │   ├── OutreachPlan.md           # Implementation plan
 │   └── P.md                      # Implementation principles
