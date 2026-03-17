@@ -65,21 +65,33 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - **Claude Code** executes tasks using MCP tools + external APIs + Playwright (lead discovery only)
 - **Portal** updates in real time via Firestore `onSnapshot` listeners (leads table + daily counters)
 
-### Lead Discovery & Outreach Flow
-1. **Find Leads** → Tavily web search (API, no browser) discovers companies/projects
-2. Agent identifies key people at target companies (permitting/development roles, not operators)
-3. For each person: **always** get LinkedIn profile via Playwright, **then** try Hunter for email
-4. Email found → `channel: 'email'`, lead has both email + LinkedIn | No email → `channel: 'linkedin'`, LinkedIn only
-5. **Outreach**: Agent sends emails via Gmail SMTP only. LinkedIn connection requests are **manual** — user sends them and clicks the LinkedIn icon in the dashboard to mark complete.
+### Lead Discovery & Outreach Flow (Signal-First)
+1. **Find Leads** → Agent searches for signal strength first: FERC queues, permits.performance.gov delayed milestones, state permit databases (TCEQ/GA EPD/AZ DEQ), ISO interconnection queues (ERCOT/MISO/SPP/Georgia Power/APS/SRP), capital commitments — focused on TX, GA, AZ
+2. Each company classified as **Active Pain** (stuck in permitting now) or **Capital Pattern** (repeat builder, next project coming)
+3. Agent finds the strongest contact — the ONE person most accountable for permitting timelines or capital deployment
+4. For each person: **always** get LinkedIn profile via Playwright, **then** try Hunter for email
+5. Email found → `channel: 'email'`, lead has both email + LinkedIn | No email → `channel: 'linkedin'`, LinkedIn only
+6. **Outreach**: Agent sends emails via Gmail SMTP only. LinkedIn connection requests are **manual** — user sends them and clicks the LinkedIn icon in the dashboard to mark complete.
 
 ### Proof Sheet (Boss Cross-Check)
-- **"Proof Sheet" button** on dashboard — runs the same lead discovery pipeline but writes to a Google Sheet instead of the leads database
-- Modal: count input + Google Sheet URL/ID input
+- **"Proof Sheet" button** on dashboard — runs the same signal-first discovery pipeline but writes to a Google Sheet instead of the leads database
+- Modal: count input + helper text (Google Sheet ID is hardcoded: `1VjCQBw86I8vTTbqyJ8EyJI4XnbaZbnge2ihGsDud2uI`)
 - Task type: `proofSheet` with `{ status, count, spreadsheetId, createdAt }`
-- Google Sheet columns: Company/Firm Name, Reason for Picking + Source, Project They Are Doing, Agents Found
-- The "Agents Found" column lists the people the system would have added as leads (name, role, email, LinkedIn)
-- Google Sheet must be shared with `firebase-adminsdk-fbsvc@thepfi.iam.gserviceaccount.com`
+- **Two tabs** in the Google Sheet — rows are routed by classification:
+  - **Active Pain** tab columns: Company, What They're Building, Where, Why They're Hurting, Proof, Contact, LinkedIn, Thought Process
+  - **Capital Pattern** tab columns: Company, What They Keep Doing, Where, Why PFI Matters To Them, Proof, Contact, LinkedIn, Thought Process
+- Multi-line fields: `why_they_are_hurting`, `why_pfi_matters`, and `thought_process` render with line breaks in the sheet (`USER_ENTERED` mode)
+- Tabs and headers are created automatically by the MCP tool
+- Results written incrementally as the agent finds them (not batched at the end)
+- `count` = exact number of companies to return. If count is 1, agent runs one search and picks one company
+- Google Sheet shared with `firebase-adminsdk-fbsvc@thepfi.iam.gserviceaccount.com`
 - Uses `googleapis` npm package with the Firebase service account credentials
+
+### Source Credibility Rules
+- Every company picked by the agent (in both `findLeads` and `proofSheet`) **must come from a real, verifiable source** with an actual URL
+- Acceptable: government filings, regulatory databases (permits.performance.gov, FERC, TCEQ, etc.), major industry publications, official project announcements
+- Not acceptable: unverified sources, speculative content, AI-generated summaries, questionable/unknown websites
+- No source URL = no save. Agent skips any result it cannot verify.
 
 ### Dual-Channel Tracking
 - Leads can have email, LinkedIn, or both contact methods
@@ -109,7 +121,7 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - `get_daily_count(userId)` — Today's LinkedIn + email counts, limits, and remaining
 - `poll_tasks(userId)` — Check for pending tasks
 - `complete_task(userId, taskName)` — Mark task as complete
-- `write_proof_sheet(spreadsheetId, rows[])` — Append rows to a Google Sheet. Each row: `{ company, reason, project, agents }`. Auto-adds header row if sheet is empty.
+- `write_proof_sheet(spreadsheetId, rows[])` — Append rows to a Google Sheet. Each row includes a `tab` field (`"Active Pain"` or `"Capital Pattern"`) and tab-specific columns (8 per tab, including Thought Process). Auto-creates tabs and headers. Uses `USER_ENTERED` mode for multi-line cell support.
 
 ### Environment Variables (MCP Server)
 - `TAVILY_API_KEY` — Tavily web search

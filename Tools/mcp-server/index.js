@@ -367,45 +367,91 @@ server.tool(
 );
 
 // ===== write_proof_sheet =====
+const TAB_HEADERS = {
+    'Active Pain': ['Company', "What They're Building", 'Where', "Why They're Hurting", 'Proof', 'Contact', 'LinkedIn', 'Thought Process'],
+    'Capital Pattern': ['Company', 'What They Keep Doing', 'Where', 'Why PFI Matters To Them', 'Proof', 'Contact', 'LinkedIn', 'Thought Process']
+};
+const TAB_FIELDS = {
+    'Active Pain': ['company', 'what_they_are_building', 'where', 'why_they_are_hurting', 'proof', 'contact', 'linkedin', 'thought_process'],
+    'Capital Pattern': ['company', 'what_they_keep_doing', 'where', 'why_pfi_matters', 'proof', 'contact', 'linkedin', 'thought_process']
+};
+
 server.tool(
     'write_proof_sheet',
-    'Write proof-of-concept rows to a Google Sheet. Appends rows with columns: Company/Firm Name, Reason for Picking + Source, Project They Are Doing, Agents Found. The sheet must be shared with the Firebase service account.',
+    'Write proof-of-concept rows to a Google Sheet. Each row includes a tab field ("Active Pain" or "Capital Pattern") and is appended to the matching tab. Tabs and headers are created automatically.',
     {
         spreadsheetId: z.string().describe('Google Sheet ID (from the URL)'),
         rows: z.array(z.object({
-            company: z.string().describe('Company or firm name'),
-            reason: z.string().describe('Why this company was picked + source URL'),
-            project: z.string().describe('The project they are working on'),
-            agents: z.string().describe('People found: names, roles, and contact info that would be saved as leads')
+            tab: z.enum(['Active Pain', 'Capital Pattern']).optional().default('Active Pain').describe('Which tab to write to'),
+            company: z.string().describe('Company name'),
+            what_they_are_building: z.string().optional().default('').describe('Active Pain: the actual project'),
+            where: z.string().optional().default('').describe('TX / GA / AZ'),
+            why_they_are_hurting: z.string().optional().default('').describe('Active Pain: what is stuck and how long'),
+            what_they_keep_doing: z.string().optional().default('').describe('Capital Pattern: their pattern'),
+            why_pfi_matters: z.string().optional().default('').describe('Capital Pattern: why the next project is coming'),
+            proof: z.string().optional().default('').describe('Source URL'),
+            contact: z.string().optional().default('').describe('Best person to reach, name only'),
+            linkedin: z.string().optional().default('').describe('Contact LinkedIn URL'),
+            thought_process: z.string().optional().default('').describe('3-4 sentences: why this company and why this contact')
         })).describe('Array of rows to append')
     },
     async ({ spreadsheetId, rows }) => {
         try {
             const sheets = getSheetsClient();
-            // Check if header row exists
-            const existing = await sheets.spreadsheets.values.get({
-                spreadsheetId,
-                range: 'A1:D1'
-            }).catch(() => null);
 
-            const values = [];
-            if (!existing || !existing.data.values || existing.data.values.length === 0) {
-                values.push(['Company / Firm Name', 'Reason for Picking + Source', 'Project They Are Doing', 'Agents Found']);
-            }
+            // Get existing sheet names
+            const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties.title' });
+            const existingTabs = new Set(spreadsheet.data.sheets.map(s => s.properties.title));
 
+            // Group rows by tab
+            const grouped = {};
             for (const row of rows) {
-                values.push([row.company, row.reason, row.project, row.agents]);
+                const tab = row.tab || 'Active Pain';
+                if (!grouped[tab]) grouped[tab] = [];
+                grouped[tab].push(row);
             }
 
-            await sheets.spreadsheets.values.append({
-                spreadsheetId,
-                range: 'A1',
-                valueInputOption: 'RAW',
-                insertDataOption: 'INSERT_ROWS',
-                requestBody: { values }
-            });
+            let totalWritten = 0;
 
-            return textResult(`Wrote ${rows.length} rows to the Google Sheet.`);
+            for (const [tabName, tabRows] of Object.entries(grouped)) {
+                // Create tab if it doesn't exist
+                if (!existingTabs.has(tabName)) {
+                    await sheets.spreadsheets.batchUpdate({
+                        spreadsheetId,
+                        requestBody: { requests: [{ addSheet: { properties: { title: tabName } } }] }
+                    });
+                    existingTabs.add(tabName);
+                }
+
+                // Check if header exists
+                const existing = await sheets.spreadsheets.values.get({
+                    spreadsheetId,
+                    range: `'${tabName}'!A1:G1`
+                }).catch(() => null);
+
+                const values = [];
+                const headers = TAB_HEADERS[tabName] || TAB_HEADERS['Active Pain'];
+                if (!existing || !existing.data.values || existing.data.values.length === 0) {
+                    values.push(headers);
+                }
+
+                const fields = TAB_FIELDS[tabName] || TAB_FIELDS['Active Pain'];
+                for (const row of tabRows) {
+                    values.push(fields.map(f => row[f] || ''));
+                }
+
+                await sheets.spreadsheets.values.append({
+                    spreadsheetId,
+                    range: `'${tabName}'!A1`,
+                    valueInputOption: 'USER_ENTERED',
+                    insertDataOption: 'INSERT_ROWS',
+                    requestBody: { values }
+                });
+
+                totalWritten += tabRows.length;
+            }
+
+            return textResult(`Wrote ${totalWritten} rows across ${Object.keys(grouped).length} tab(s).`);
         } catch (err) {
             return textResult(`ERROR writing to Google Sheet: ${err.message}`);
         }

@@ -23,18 +23,48 @@ Poll for tasks using `poll_tasks` every 10 seconds. If no tasks are pending, wai
 
 ### findLeads
 1. Read the task criteria (count). The `count` is the **exact number of companies** to return — no more, no less.
-2. **Discover targets via API** — Use `search_web` to find companies and projects with active permitting exposure. Cast a wide net across **multiple source types** — do not limit yourself to one kind of source. Only run enough searches to fill the count. If count is 1, run ONE search and pick the single best company. Sources to search include:
-   - **Federal Permitting Dashboard** — search for projects on `permits.performance.gov` (the FAST-41 federal permitting tracker)
-   - **FERC filings** — interconnection queue filings in TX/GA/AZ and other states
-   - **State permit databases** — TCEQ (TX), Georgia EPD, Arizona DEQ, California CEQA, and any other state environmental/permitting agencies
-   - **Industry news** — data center, manufacturing, LNG, solar/wind, and grid infrastructure project announcements
-   - **Deal activity** — PE fund infrastructure acquisitions, land deals, project finance announcements
-   - **Any other public source** you can find via web search — county planning boards, EIS filings, DOE loan announcements, Army Corps permits, etc.
+2. **Search for signal strength first** — Use `search_web` to hunt for the strongest signals across these sources, focused on **TX, GA, AZ**:
+   - **FERC interconnection queues** — filings in TX, GA, AZ
+     Example queries:
+     - `"FERC interconnection queue Texas 2025 2026 solar wind storage"`
+     - `"FERC generation interconnection filing Georgia new project"`
+     - `"FERC queue Arizona large-scale energy project application"`
 
-   The more varied the sources, the better. Always note which source each company came from.
+   - **permits.performance.gov** — projects with delayed milestones
+     Example queries:
+     - `"site:permits.performance.gov delayed milestone infrastructure project"`
+     - `"permits.performance.gov FAST-41 project behind schedule"`
+     - `"federal permitting dashboard delayed environmental review 2025 2026"`
 
-   **Source credibility rule:** Every company you pick MUST come from a **real, verifiable source**. The search result must include an actual URL you can point to — a government filing, a news article from a known publication, a regulatory database entry, or an official project announcement. Do NOT use sources that are unverified, speculative, AI-generated summaries, or from questionable/unknown websites. If you cannot verify the source is credible, skip that result and find another. When in doubt, government databases and major industry publications are always preferred.
-3. **Identify the RIGHT people** — This is critical. Do NOT target operators, construction managers, or general executives. The target is the person who answers: *"Is this project going to get its permits on time and what happens to returns if it doesn't?"*
+   - **State permit databases** — TCEQ (TX), Georgia EPD, Arizona DEQ for open permit applications
+     Example queries:
+     - `"TCEQ permit application pending solar wind energy Texas 2025 2026"`
+     - `"Georgia EPD air quality permit power plant data center application"`
+     - `"Arizona DEQ environmental permit new construction energy project"`
+
+   - **ISO interconnection queues** — ERCOT, MISO, SPP, Georgia Power, APS, SRP
+     Example queries:
+     - `"ERCOT interconnection queue new generation project Texas 2025 2026"`
+     - `"MISO interconnection queue solar wind Texas"`
+     - `"Georgia Power interconnection queue new generation application"`
+     - `"APS SRP interconnection queue Arizona solar storage project"`
+
+   - **Recent capital commitments** — fund closes, EPC contract wins, project announcements in TX, GA, AZ
+     Example queries:
+     - `"infrastructure fund investment solar wind Texas Georgia Arizona 2025 2026"`
+     - `"EPC contract awarded energy project Texas Georgia Arizona"`
+     - `"data center development announced Texas Georgia Arizona permitting"`
+     - `"private equity infrastructure fund close renewable energy"`
+
+   Only run enough searches to fill the count. If count is 1, run ONE search and pick the single best company. Mix and match queries across source types — do not run all queries from one source before moving to the next.
+
+   **Source credibility rule:** Every company you pick MUST come from a **real, verifiable source** with an actual URL — a government filing, a news article from a known publication, a regulatory database entry, or an official project announcement. Do NOT use unverified, speculative, AI-generated, or questionable sources. No source URL = no save. When in doubt, government databases and major industry publications are always preferred.
+
+3. **Classify each result** — For every company found, decide which category it falls into:
+   - **Active Pain** — The project is currently stuck in permitting. Something is delayed, contested, or blocked right now.
+   - **Capital Pattern** — This company keeps doing these projects. The next one is coming and they will hit the same permitting friction again.
+
+4. **Find the strongest contact** — For each company, find the ONE person most accountable for permitting timelines or capital deployment. Do NOT target operators, construction managers, or general executives. The target answers: *"Is this project going to get its permits on time and what happens to returns if it doesn't?"*
 
    **At the operator/developer**, target:
    - VP of Development
@@ -47,16 +77,15 @@ Poll for tasks using `poll_tasks` every 10 seconds. If no tasks are pending, wai
    - VP of Development or Acquisitions
    - Head of Infrastructure Investments
 
-   Prioritize people whose current role includes accountability for project delivery timelines, permitting outcomes, or capital returns on active projects. Skip people whose role has no exposure to whether permits come through on time.
-
    For each target company, use `search_web` to find people in these specific roles.
-4. **Enrich contacts** — For each person found, always collect both LinkedIn and email:
+
+5. **Enrich contacts** — For each person found, always collect both LinkedIn and email:
    a. **LinkedIn (Playwright only)** — Use Playwright to open linkedin.com/search and search for the person by name + company. Grab their profile URL from the results. **Never use `search_web`/Tavily to find LinkedIn profiles** — Tavily does not reliably return LinkedIn URLs.
    b. Call `enrich_contact` with their first name, last name, and company domain
    c. If Hunter returns an email → set `channel: 'email'`, `enrichmentSource: 'hunter'` (lead has both email and LinkedIn)
    d. If no email found → set `channel: 'linkedin'`, `enrichmentSource: 'none'` (lead has LinkedIn only)
-5. **Save leads** — Call `save_leads` with all results. Every lead must have at minimum: name, company, role, and a LinkedIn URL. Email is a bonus from Hunter.
-6. Call `complete_task`
+6. **Save leads** — Call `save_leads` with all results. Every lead must have at minimum: name, company, role, and a LinkedIn URL. Email is a bonus from Hunter.
+7. Call `complete_task`
 
 ### writeMessages
 1. Call `get_skill` to get the user's messaging style
@@ -77,18 +106,37 @@ Poll for tasks using `poll_tasks` every 10 seconds. If no tasks are pending, wai
 7. Call `complete_task`
 
 ### proofSheet
-This task is a **proof-of-concept** version of findLeads. It runs the same discovery pipeline but writes results to a Google Sheet instead of the leads database. The task includes a `spreadsheetId` and `count` field.
+This task is a **proof-of-concept** version of findLeads. It runs the same signal-first discovery pipeline but writes results to a Google Sheet instead of the leads database. Results are split into two tabs: **Active Pain** and **Capital Pattern**. The task includes a `spreadsheetId` and `count` field.
 
 1. Read the task data (count, spreadsheetId). The `count` is the **exact number of companies** to return — no more, no less.
-2. **Discover targets via API** — Use `search_web` to find companies with active permitting exposure. Cast a wide net across **multiple source types** (same sources as findLeads: federal permitting dashboard at permits.performance.gov, FERC filings, state permit databases, industry news, deal activity, county planning boards, EIS filings, etc.). Only run enough searches to fill the count. If count is 1, run ONE search and pick the single best company. Do NOT run multiple searches when count is small. **Same source credibility rule as findLeads applies** — every company must come from a real, verifiable source with a URL. No unverified or questionable sources.
-3. **Identify people** — For each of the `count` companies only: find VP of Development, Head of Permitting, Director of Entitlements, infrastructure fund partners, etc.
-4. **Enrich contacts** — For each person at those companies only, attempt `enrich_contact` with Hunter.io. Also use Playwright to find their LinkedIn profile URL.
-5. **Write to Google Sheet** — Instead of `save_leads`, call `write_proof_sheet` with the `spreadsheetId` and an array of rows. Each row should have:
-   - `company`: The company/firm name
-   - `reason`: Why this company was picked (e.g. "FERC interconnection filing in TX" or "Data center expansion announced") + the source URL where you found it
-   - `project`: The specific project they are involved in (e.g. "500MW solar farm in Pecos County, TX")
-   - `agents`: A formatted string listing all people found at this company who would normally be saved as leads. For each person include: name, role, email (if found), LinkedIn URL (if found). Separate multiple people with " | "
-6. You can call `write_proof_sheet` multiple times (e.g. batch of 5 rows at a time) so results appear incrementally.
+2. **Search for signal strength first** — Same logic as findLeads. Use `search_web` to hunt for the strongest signals across FERC queues, permits.performance.gov, state permit databases (TCEQ/GA EPD/AZ DEQ), ISO interconnection queues (ERCOT/MISO/SPP/Georgia Power/APS/SRP), and capital commitments — focused on TX, GA, AZ. Only run enough searches to fill the count. **Same source credibility rule as findLeads** — no source URL, no save.
+3. **Classify each result** — Decide: **Active Pain** (project currently stuck in permitting) or **Capital Pattern** (repeat builder, next project coming).
+4. **Find the strongest contact** — For each company, find the ONE best person (same targeting rules as findLeads). Use Playwright to find their LinkedIn profile URL.
+5. **Write to Google Sheet as results come in** — Do NOT wait until everything is found. Call `write_proof_sheet` as soon as you have results. Each row must include a `tab` field set to either `"Active Pain"` or `"Capital Pattern"`.
+
+   **Active Pain rows:**
+   - `tab`: `"Active Pain"`
+   - `company`: Who they are
+   - `what_they_are_building`: The actual project
+   - `where`: TX / GA / AZ
+   - `why_they_are_hurting`: What's stuck and how long. Use `\n` line breaks to separate points — this field renders multi-line in the sheet.
+   - `proof`: The source URL
+   - `contact`: Best person to reach, name only
+   - `linkedin`: Their LinkedIn URL
+   - `thought_process`: 3–4 sentences explaining why you picked this company and why you picked this contact. Use `\n` line breaks between sentences — this field renders multi-line in the sheet.
+
+   **Capital Pattern rows:**
+   - `tab`: `"Capital Pattern"`
+   - `company`: Who they are
+   - `what_they_keep_doing`: One sentence — their pattern
+   - `where`: TX / GA / AZ
+   - `why_pfi_matters`: Why the next project is coming. Use `\n` line breaks to separate points — this field renders multi-line in the sheet.
+   - `proof`: The source URL
+   - `contact`: Best person to reach, name only
+   - `linkedin`: Their LinkedIn URL
+   - `thought_process`: 3–4 sentences explaining why you picked this company and why you picked this contact. Use `\n` line breaks between sentences — this field renders multi-line in the sheet.
+
+6. You can call `write_proof_sheet` multiple times so results appear incrementally in the sheet.
 7. Call `complete_task`
 
 ## LinkedIn Connect Safety Rules
