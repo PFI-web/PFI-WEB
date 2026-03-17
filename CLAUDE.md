@@ -49,7 +49,8 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - Single `Team/index.html` file with inline CSS and JS
 - Firebase (Firestore) for data — project: `thepfi`
 - MCP server (`Tools/mcp-server/`) bridging Claude Code ↔ Firestore
-- Claude Code + Playwright for LinkedIn automation (persistent session at `~/.pfi-linkedin-session/`)
+- Claude Code for automated email outreach; LinkedIn outreach is manual via dashboard
+- Playwright used only during lead discovery (LinkedIn profile search), not for sending
 - No Firebase Auth — simple email-based login matching against employee list in Firestore
 
 ### Screen Flow (4 screens, sequential)
@@ -61,33 +62,41 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 ### Architecture
 - **Portal** writes tasks to `users/{uid}/tasks/` in Firestore
 - **Claude Code** polls for tasks via MCP `poll_tasks` tool every 10s
-- **Claude Code** executes tasks using MCP tools + external APIs + Playwright (LinkedIn fallback)
-- **Portal** updates in real time via Firestore `onSnapshot` listener
+- **Claude Code** executes tasks using MCP tools + external APIs + Playwright (lead discovery only)
+- **Portal** updates in real time via Firestore `onSnapshot` listeners (leads table + daily counters)
 
 ### Lead Discovery & Outreach Flow
 1. **Find Leads** → Tavily web search (API, no browser) discovers companies/projects
 2. Agent identifies key people at target companies (permitting/development roles, not operators)
 3. For each person: **always** get LinkedIn profile via Playwright, **then** try Hunter for email
 4. Email found → `channel: 'email'`, lead has both email + LinkedIn | No email → `channel: 'linkedin'`, LinkedIn only
-5. **Outreach**: email leads sent via Gmail SMTP, LinkedIn leads sent via Playwright
+5. **Outreach**: Agent sends emails via Gmail SMTP only. LinkedIn connection requests are **manual** — user sends them and clicks the LinkedIn icon in the dashboard to mark complete.
+
+### Dual-Channel Tracking
+- Leads can have email, LinkedIn, or both contact methods
+- Each channel tracked independently: `emailSent` and `linkedinSent` fields
+- **Partial completion**: Yellow badge ("Email Sent" or "LinkedIn Sent") when one channel is done
+- **Full completion**: Green "Done" badge when all available channels are complete
+- Dashboard shows a LinkedIn icon button next to partial-status leads for manual LinkedIn completion
 
 ### Playwright / LinkedIn Session
+- Used **only during lead discovery** (finding LinkedIn profile URLs via search)
 - Uses persistent browser context saved at `~/.pfi-linkedin-session/`
-- On agent startup, verifies LinkedIn session is active (navigates to feed)
 - First time only: user logs into LinkedIn manually in the Playwright browser window
-- Session persists across agent restarts — no Chrome debug port needed
+- Session persists across agent restarts
 - Agent must always use `chromium.launchPersistentContext()`, never `chromium.launch()` or CDP
+- **Not used for sending connection requests** — that's manual
 
 ### MCP Server (`Tools/mcp-server/index.js`)
 11 tools exposed:
 - `search_web(query)` — Tavily API web search, returns structured results
 - `enrich_contact(firstName, lastName, domain)` — Hunter email finder, returns email or null
-- `send_email(userId, leadId, to, subject, body)` — Gmail SMTP send, auto-marks lead done, enforces daily email limit
+- `send_email(userId, leadId, to, subject, body)` — Gmail SMTP send, sets `emailSent: true`, only sets `done: true` if LinkedIn is also complete (or not applicable). Enforces daily email limit
 - `get_skill(userId)` — Read user's skill document
 - `get_pending_leads(userId, needsMessage?)` — Get leads where done=false
 - `save_leads(userId, leads[])` — Save new leads with dedup by LinkedIn URL and email
-- `save_message(userId, leadId, message)` — Save message to a lead
-- `mark_lead_done(userId, leadId)` — Set done=true, sentAt, increment daily counter, enforce limit
+- `save_message(userId, leadId, message, subject?, linkedinNote?)` — Save outreach message to a lead. Email leads: `message` (body) + `subject` + optional `linkedinNote`. LinkedIn-only leads: `message` (connection note under 300 chars)
+- `mark_lead_done(userId, leadId)` — Sets `linkedinSent: true`, only sets `done: true` if email is also complete (or not applicable). Increments daily LinkedIn counter, enforces limit
 - `get_daily_count(userId)` — Today's LinkedIn + email counts, limits, and remaining
 - `poll_tasks(userId)` — Check for pending tasks
 - `complete_task(userId, taskName)` — Mark task as complete
@@ -102,12 +111,23 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - `company/employees` — `{ list: [{ name, role, email }] }`
 - `company/config` — `{ skillTemplate: "..." }` with `{{name}}` and `{{role}}` placeholders
 - `users/{uid}/profile/main` — `{ onboarded, skill, name, role, linkedinLimit, emailLimit, linkedin_YYYY-MM-DD, email_YYYY-MM-DD, claudeStarted }`
-- `users/{uid}/leads/{leadId}` — `{ name, company, role, linkedin, email, channel, enrichmentSource, message, done, createdAt, sentAt }`
+- `users/{uid}/leads/{leadId}` — `{ name, company, role, linkedin, email, channel, enrichmentSource, message, emailSubject, linkedinNote, emailSent, emailSentAt, linkedinSent, linkedinSentAt, done, createdAt, sentAt }`
 - `users/{uid}/tasks/{taskName}` — `{ status: "pending"|"complete", createdAt }`
+
+### Testing Mode
+**Currently active.** Both `Tools/mcp-server/index.js` and `Team/index.html` have a `ROOT_COLLECTION` constant set to `'test'` instead of `'users'`. This routes all reads/writes to the `test` Firestore collection. Test data seeded via `Tools/seed/seed-test.js`. **Switch back to `'users'` in both files when done testing.**
+
+### Dashboard UI
+- Lead table with real-time Firestore `onSnapshot` listeners
+- Message modal (popup) for viewing/editing email and LinkedIn messages separately
+- Status column: Pending (gray) → partial (yellow, "Email Sent" or "LinkedIn Sent") → Done (green)
+- LinkedIn icon button appears next to partial-status leads for manual completion
+- Daily counters (LinkedIn + email) update in real time via `onSnapshot`
 
 ### Firestore Rules
 - `company/*` — read: open, write: console only
 - `users/*` — read/write: open (internal tool)
+- `test/*` — read/write: open (testing only, remove when done)
 
 ### Skill System
 Master skill template in `company/config` gets personalized per user (replace `{{name}}` and `{{role}}`). Claude Code sets up the Claude Project with instructions automatically on first run.
@@ -130,12 +150,10 @@ PFI/
 │   │   ├── index.js              # MCP server (Firestore bridge)
 │   │   └── package.json
 │   ├── seed/
-│   │   ├── seed.js               # Firestore seed script
+│   │   ├── seed.js               # Firestore seed script (production)
+│   │   ├── seed-test.js          # Test data seed script (test collection)
 │   │   └── package.json
-│   ├── outreach-agent.md          # Agent instructions (polling, task handlers, Playwright rules)
-│   ├── Outreach.md               # System description
-│   ├── OutreachPlan.md           # Implementation plan
-│   └── P.md                      # Implementation principles
+│   └── outreach-agent.md          # Agent instructions (polling, task handlers, LinkedIn safety rules)
 ├── firestore.rules
 ├── firebase.json
 ├── assets/

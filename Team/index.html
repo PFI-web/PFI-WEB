@@ -198,15 +198,30 @@
         .lead-table tr:hover td { background: #FAFAFA; }
         .lead-link { color: #2E6DA4; text-decoration: none; font-size: 14px; }
         .lead-link:hover { text-decoration: underline; }
-        .lead-message {
-            width: 100%; min-height: 36px;
-            font-family: 'Inter', sans-serif; font-size: 14px; color: #333;
-            border: 1px solid transparent; border-radius: 4px;
-            padding: 6px 8px; background: transparent;
-            resize: vertical; transition: border-color 0.2s; line-height: 1.5;
+        .msg-btn {
+            font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
+            padding: 6px 16px; border: 1px solid #E0E0E0; border-radius: 6px;
+            background: #FFF; color: #2E6DA4; cursor: pointer; transition: border-color 0.2s;
         }
-        .lead-message:focus { outline: none; border-color: #2E6DA4; background: #FFF; }
-        .lead-message::placeholder { color: #BBB; }
+        .msg-btn:hover { border-color: #2E6DA4; }
+        .msg-btn.empty { color: #BBB; font-weight: 400; }
+        .msg-section { margin-bottom: 20px; }
+        .msg-section:last-child { margin-bottom: 0; }
+        .msg-section-label {
+            font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+            color: #999; margin-bottom: 8px;
+        }
+        .msg-section textarea {
+            width: 100%; font-family: 'Inter', sans-serif; font-size: 14px; color: #333;
+            border: 1px solid #E0E0E0; border-radius: 6px; padding: 10px 12px;
+            resize: vertical; line-height: 1.6; min-height: 80px;
+        }
+        .msg-section textarea:focus { outline: none; border-color: #2E6DA4; }
+        .msg-section input {
+            width: 100%; font-family: 'Inter', sans-serif; font-size: 14px; color: #333;
+            border: 1px solid #E0E0E0; border-radius: 6px; padding: 10px 12px;
+        }
+        .msg-section input:focus { outline: none; border-color: #2E6DA4; }
         .status-badge {
             display: inline-block; font-size: 12px; font-weight: 600;
             padding: 4px 12px; border-radius: 12px;
@@ -214,6 +229,14 @@
         }
         .status-badge.pending { background: #F0F0F0; color: #777; }
         .status-badge.pending:hover { background: #E0E0E0; }
+        .status-badge.partial { background: #FFF8E1; color: #F57F17; cursor: default; }
+        .li-done-btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 28px; height: 28px; border-radius: 6px;
+            border: 1px solid #E0E0E0; background: #FFF; cursor: pointer;
+            margin-left: 12px; vertical-align: middle; transition: border-color 0.2s, background 0.2s;
+        }
+        .li-done-btn:hover { border-color: #0A66C2; background: #F0F7FF; }
         .status-badge.done { background: #E8F5E9; color: #2E7D32; cursor: default; }
         .empty-state { text-align: center; padding: 80px 24px; color: #999; font-size: 16px; }
 
@@ -502,6 +525,18 @@
         </div>
     </div>
 
+    <!-- ===== MESSAGE MODAL ===== -->
+    <div class="modal-overlay" id="messageModal">
+        <div class="modal">
+            <h2 id="msgModalTitle">Message</h2>
+            <div id="msgModalBody"></div>
+            <div class="modal-actions">
+                <button class="action-btn" onclick="closeModal('messageModal')">Cancel</button>
+                <button class="action-btn primary" onclick="saveMessageModal()">Save</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Firebase SDK -->
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
@@ -521,7 +556,9 @@
         const db = firebase.firestore();
 
         // Helpers
-        const userDoc = () => db.collection('users').doc(currentUser.uid);
+        // SWITCH: change to 'users' when done testing
+        const ROOT_COLLECTION = 'test';
+        const userDoc = () => db.collection(ROOT_COLLECTION).doc(currentUser.uid);
         const profileDoc = () => userDoc().collection('profile').doc('main');
         const leadsCol = () => userDoc().collection('leads');
         const tasksCol = () => userDoc().collection('tasks');
@@ -650,24 +687,28 @@
         function initDashboard() {
             showScreen('dashboardScreen');
             document.getElementById('topbarName').textContent = selectedEmployee.name;
-            updateCounter();
+            listenToCounter();
             listenToLeads();
         }
 
-        async function updateCounter() {
-            const today = new Date().toISOString().split('T')[0];
-            const profile = await profileDoc().get();
-            const data = profile.exists ? profile.data() : {};
-            const liCount = data['linkedin_' + today] || 0;
-            const liLimit = data.linkedinLimit || 20;
-            const emCount = data['email_' + today] || 0;
-            const emLimit = data.emailLimit || 20;
-            const el = document.getElementById('topbarCounter');
-            el.textContent = `LinkedIn: ${liCount}/${liLimit}  ·  Email: ${emCount}/${emLimit}`;
-            el.className = 'topbar-counter';
-            const totalPct = Math.max(liCount / liLimit, emCount / emLimit);
-            if (totalPct >= 1) el.classList.add('red');
-            else if (totalPct >= 0.8) el.classList.add('orange');
+        let counterUnsubscribe = null;
+
+        function listenToCounter() {
+            if (counterUnsubscribe) counterUnsubscribe();
+            counterUnsubscribe = profileDoc().onSnapshot(snapshot => {
+                const data = snapshot.exists ? snapshot.data() : {};
+                const today = new Date().toISOString().split('T')[0];
+                const liCount = data['linkedin_' + today] || 0;
+                const liLimit = data.linkedinLimit || 20;
+                const emCount = data['email_' + today] || 0;
+                const emLimit = data.emailLimit || 20;
+                const el = document.getElementById('topbarCounter');
+                el.textContent = `LinkedIn: ${liCount}/${liLimit}  ·  Email: ${emCount}/${emLimit}`;
+                el.className = 'topbar-counter';
+                const totalPct = Math.max(liCount / liLimit, emCount / emLimit);
+                if (totalPct >= 1) el.classList.add('red');
+                else if (totalPct >= 0.8) el.classList.add('orange');
+            });
         }
 
         function listenToLeads() {
@@ -682,28 +723,29 @@
                 snapshot.forEach(doc => {
                     const lead = doc.data();
                     const isDone = lead.done === true;
+                    const isPartial = !isDone && (!!lead.emailSent || !!lead.linkedinSent);
                     const tr = document.createElement('tr');
                     const ch = lead.channel || 'linkedin';
                     let contactParts = [];
                     if (lead.email) contactParts.push(`<span style="font-size:13px;color:#333;">${lead.email}</span>`);
                     if (lead.linkedin) contactParts.push(`<a class="lead-link" href="${lead.linkedin}" target="_blank">LinkedIn</a>`);
                     const contactLink = contactParts.join(' · ') || '—';
+                    const hasMsg = lead.message || lead.emailSubject || lead.linkedinNote;
                     tr.innerHTML = `
                         <td>${lead.name || ''}</td>
                         <td>${lead.company || ''}</td>
                         <td><span style="font-size:12px;font-weight:600;padding:3px 8px;border-radius:10px;background:${ch === 'email' ? '#E3F2FD' : '#F0F0F0'};color:${ch === 'email' ? '#1565C0' : '#777'};">${ch === 'email' ? 'Email' : 'LinkedIn'}</span></td>
                         <td>${contactLink}</td>
-                        <td><textarea class="lead-message" placeholder="No message yet..." rows="1" data-id="${doc.id}">${lead.message || ''}</textarea></td>
-                        <td><span class="status-badge ${isDone ? 'done' : 'pending'}" data-id="${doc.id}">${isDone ? 'Done' : 'Pending'}</span></td>
+                        <td><button class="msg-btn ${hasMsg ? '' : 'empty'}" data-id="${doc.id}">${hasMsg ? 'View' : 'No message'}</button></td>
+                        <td>
+                            <span class="status-badge ${isDone ? 'done' : isPartial ? 'partial' : 'pending'}" data-id="${doc.id}">${isDone ? 'Done' : isPartial ? (lead.emailSent ? 'Email Sent' : 'LinkedIn Sent') : 'Pending'}</span>
+                            ${isPartial && !lead.linkedinSent && lead.linkedin ? `<button class="li-done-btn" data-id="${doc.id}" title="Mark LinkedIn sent"><svg width="14" height="14" viewBox="0 0 24 24" fill="#0A66C2"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></button>` : ''}
+                        </td>
                     `;
                     tbody.appendChild(tr);
                 });
-                tbody.querySelectorAll('.lead-message').forEach(ta => {
-                    autoResize(ta);
-                    ta.addEventListener('input', () => autoResize(ta));
-                    ta.addEventListener('blur', () => {
-                        leadsCol().doc(ta.dataset.id).update({ message: ta.value });
-                    });
+                tbody.querySelectorAll('.msg-btn').forEach(btn => {
+                    btn.addEventListener('click', () => openMessageModal(btn.dataset.id));
                 });
                 tbody.querySelectorAll('.status-badge.pending').forEach(badge => {
                     badge.addEventListener('click', () => {
@@ -713,10 +755,99 @@
                         incrementDailyCount();
                     });
                 });
+                tbody.querySelectorAll('.li-done-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const id = btn.dataset.id;
+                        const doc = await leadsCol().doc(id).get();
+                        const lead = doc.data();
+                        const emailDone = !!lead.emailSent || !lead.email;
+                        await leadsCol().doc(id).update({
+                            linkedinSent: true,
+                            linkedinSentAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            ...(emailDone ? { done: true, sentAt: firebase.firestore.FieldValue.serverTimestamp() } : {})
+                        });
+                        incrementDailyCount();
+                    });
+                });
             });
         }
 
-        function autoResize(ta) { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; }
+        // ===== MESSAGE MODAL =====
+        let msgModalLeadId = null;
+
+        async function openMessageModal(leadId) {
+            msgModalLeadId = leadId;
+            const doc = await leadsCol().doc(leadId).get();
+            const lead = doc.data();
+            const hasEmail = !!lead.email;
+            const hasLinkedin = !!lead.linkedin;
+
+            document.getElementById('msgModalTitle').textContent = `Message — ${lead.name}`;
+
+            let html = '';
+
+            if (hasEmail) {
+                html += `<div class="msg-section">
+                    <div class="msg-section-label">Email</div>
+                    <input type="text" id="msgSubject" placeholder="Subject line..." value="${(lead.emailSubject || '').replace(/"/g, '&quot;')}">
+                    <textarea id="msgEmailBody" style="margin-top:8px;" placeholder="Email body...">${lead.message || ''}</textarea>
+                </div>`;
+            }
+
+            if (hasLinkedin) {
+                html += `<div class="msg-section">
+                    <div class="msg-section-label">LinkedIn Note <span style="font-weight:400;color:#BBB;">(max 300 chars)</span></div>
+                    <textarea id="msgLinkedinNote" maxlength="300" placeholder="LinkedIn connection note...">${hasEmail ? (lead.linkedinNote || '') : (lead.message || '')}</textarea>
+                    ${hasLinkedin ? `<div style="font-size:12px;color:#BBB;margin-top:4px;text-align:right;" id="msgLinkedinCount">0/300</div>` : ''}
+                </div>`;
+            }
+
+            if (!hasEmail && !hasLinkedin) {
+                html = '<p style="font-size:14px;color:#999;">No contact info available for this lead.</p>';
+            }
+
+            document.getElementById('msgModalBody').innerHTML = html;
+
+            // LinkedIn char counter
+            const liNote = document.getElementById('msgLinkedinNote');
+            if (liNote) {
+                const counter = document.getElementById('msgLinkedinCount');
+                counter.textContent = liNote.value.length + '/300';
+                liNote.addEventListener('input', () => { counter.textContent = liNote.value.length + '/300'; });
+            }
+
+            openModal('messageModal');
+        }
+
+        async function saveMessageModal() {
+            if (!msgModalLeadId) return;
+            const doc = await leadsCol().doc(msgModalLeadId).get();
+            const lead = doc.data();
+            const hasEmail = !!lead.email;
+            const hasLinkedin = !!lead.linkedin;
+
+            const update = {};
+
+            if (hasEmail) {
+                const subject = document.getElementById('msgSubject');
+                const body = document.getElementById('msgEmailBody');
+                if (subject) update.emailSubject = subject.value;
+                if (body) update.message = body.value;
+            }
+
+            if (hasLinkedin) {
+                const liNote = document.getElementById('msgLinkedinNote');
+                if (liNote) {
+                    update.linkedinNote = liNote.value;
+                    // If no email, message field holds the linkedin note
+                    if (!hasEmail) update.message = liNote.value;
+                }
+            }
+
+            await leadsCol().doc(msgModalLeadId).update(update);
+            closeModal('messageModal');
+            msgModalLeadId = null;
+        }
 
         async function incrementDailyCount() {
             const today = new Date().toISOString().split('T')[0];
@@ -795,7 +926,7 @@
         async function openOutreachModal() {
             const snapshot = await leadsCol().where('done', '==', false).get();
             let ready = 0;
-            snapshot.forEach(doc => { if (doc.data().message) ready++; });
+            snapshot.forEach(doc => { const d = doc.data(); if (d.message || d.linkedinNote) ready++; });
             document.getElementById('outreachSummary').textContent = `${ready} lead${ready !== 1 ? 's' : ''} ready to send.`;
             await tasksCol().doc('performOutreach').set({
                 status: 'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp()
@@ -824,6 +955,7 @@
         // ===== SIGN OUT =====
         function signOut() {
             if (leadsUnsubscribe) leadsUnsubscribe();
+            if (counterUnsubscribe) counterUnsubscribe();
             currentUser = null;
             selectedEmployee = null;
             showScreen('loginScreen');

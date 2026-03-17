@@ -12,5 +12,10 @@ service cloud.firestore {
     match /users/{userId}/{document=**} {
       allow read, write: if true;
     }
+
+    // Test collection — remove when done testing
+    match /test/{userId}/{document=**} {
+      allow read, write: if true;
+    }
   }
 }

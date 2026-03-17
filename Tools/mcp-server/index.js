@@ -18,7 +18,9 @@ admin.initializeApp({
 const db = admin.firestore();
 
 // Helpers
-const userRef = (uid) => db.collection('users').doc(uid);
+// SWITCH: change to 'users' when done testing
+const ROOT_COLLECTION = 'test';
+const userRef = (uid) => db.collection(ROOT_COLLECTION).doc(uid);
 const profileRef = (uid) => userRef(uid).collection('profile').doc('main');
 const leadsRef = (uid) => userRef(uid).collection('leads');
 const tasksRef = (uid) => userRef(uid).collection('tasks');
@@ -122,14 +124,25 @@ server.tool(
                 subject,
                 text: body
             });
-            await leadsRef(userId).doc(leadId).update({
-                done: true,
-                sentAt: admin.firestore.FieldValue.serverTimestamp()
-            });
+            const leadDoc = await leadsRef(userId).doc(leadId).get();
+            const leadData = leadDoc.exists ? leadDoc.data() : {};
+            const linkedinDone = !!leadData.linkedinSent;
+            const hasLinkedin = !!leadData.linkedin;
+            const allDone = !hasLinkedin || linkedinDone;
+            const update = {
+                emailSent: true,
+                emailSentAt: admin.firestore.FieldValue.serverTimestamp()
+            };
+            if (allDone) {
+                update.done = true;
+                update.sentAt = admin.firestore.FieldValue.serverTimestamp();
+            }
+            await leadsRef(userId).doc(leadId).update(update);
             await profileRef(userId).update({
                 [key]: admin.firestore.FieldValue.increment(1)
             });
-            return textResult(`Email sent to ${to}. Lead ${leadId} marked done. Count: ${count + 1}/${limit}.`);
+            const status = allDone ? 'fully done' : 'email sent (LinkedIn pending)';
+            return textResult(`Email sent to ${to}. Lead ${leadId} ${status}. Count: ${count + 1}/${limit}.`);
         } catch (err) {
             return textResult(`ERROR sending email: ${err.message}`);
         }
@@ -226,14 +239,19 @@ server.tool(
 // ===== save_message =====
 server.tool(
     'save_message',
-    'Save a message to a specific lead document',
+    'Save outreach messages to a lead. For email-channel leads: subject + message (email body) + optional linkedinNote. For linkedin-channel leads: just message (the connection note, under 300 chars).',
     {
         userId: z.string().describe('Firebase user ID'),
         leadId: z.string().describe('Lead document ID'),
-        message: z.string().describe('The LinkedIn connection note (under 300 chars)')
+        message: z.string().describe('Email body (email-channel) or LinkedIn note (linkedin-channel)'),
+        subject: z.string().optional().describe('Email subject line (email-channel leads only)'),
+        linkedinNote: z.string().optional().describe('LinkedIn connection note under 300 chars (for email-channel leads that also have LinkedIn)')
     },
-    async ({ userId, leadId, message }) => {
-        await leadsRef(userId).doc(leadId).update({ message });
+    async ({ userId, leadId, message, subject, linkedinNote }) => {
+        const update = { message };
+        if (subject) update.emailSubject = subject;
+        if (linkedinNote) update.linkedinNote = linkedinNote;
+        await leadsRef(userId).doc(leadId).update(update);
         return textResult(`Message saved for lead ${leadId}.`);
     }
 );
@@ -257,16 +275,27 @@ server.tool(
             return textResult(`LIMIT_REACHED: Daily limit of ${limit} hit. Stop sending.`);
         }
 
-        await leadsRef(userId).doc(leadId).update({
-            done: true,
-            sentAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+        const leadDoc = await leadsRef(userId).doc(leadId).get();
+        const leadData = leadDoc.exists ? leadDoc.data() : {};
+        const emailDone = !!leadData.emailSent;
+        const hasEmail = !!leadData.email;
+        const allDone = !hasEmail || emailDone;
+        const update = {
+            linkedinSent: true,
+            linkedinSentAt: admin.firestore.FieldValue.serverTimestamp()
+        };
+        if (allDone) {
+            update.done = true;
+            update.sentAt = admin.firestore.FieldValue.serverTimestamp();
+        }
+        await leadsRef(userId).doc(leadId).update(update);
 
         await profileRef(userId).update({
             [key]: admin.firestore.FieldValue.increment(1)
         });
 
-        return textResult(`Lead ${leadId} marked done. Count: ${count + 1}/${limit}.`);
+        const status = allDone ? 'fully done' : 'LinkedIn sent (email pending)';
+        return textResult(`Lead ${leadId} ${status}. Count: ${count + 1}/${limit}.`);
     }
 );
 
