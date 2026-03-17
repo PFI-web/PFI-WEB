@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
 import admin from 'firebase-admin';
+import nodemailer from 'nodemailer';
 import { readFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -24,10 +25,106 @@ const tasksRef = (uid) => userRef(uid).collection('tasks');
 const textResult = (text) => ({ content: [{ type: 'text', text }] });
 const todayKey = () => 'linkedin_' + new Date().toISOString().split('T')[0];
 
+// Gmail SMTP transport (lazy-initialized)
+let mailTransport = null;
+function getMailTransport() {
+    if (!mailTransport) {
+        const user = process.env.GMAIL_USER;
+        const pass = process.env.GMAIL_APP_PASSWORD;
+        if (!user || !pass) return null;
+        mailTransport = nodemailer.createTransport({
+            service: 'gmail',
+            auth: { user, pass }
+        });
+    }
+    return mailTransport;
+}
+
 const server = new McpServer({
     name: 'pfi-outreach',
     version: '1.0.0'
 });
+
+// ===== search_web =====
+server.tool(
+    'search_web',
+    'Search the web using Tavily API. Returns structured results (title, url, snippet). Use for discovering companies, projects, and signals — no browser needed.',
+    { query: z.string().describe('Search query') },
+    async ({ query }) => {
+        const apiKey = process.env.TAVILY_API_KEY;
+        if (!apiKey) return textResult('ERROR: TAVILY_API_KEY not set.');
+        const res = await fetch('https://api.tavily.com/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ api_key: apiKey, query, max_results: 10 })
+        });
+        if (!res.ok) return textResult(`ERROR: Tavily returned ${res.status}`);
+        const data = await res.json();
+        const results = (data.results || []).map(r => ({
+            title: r.title, url: r.url, snippet: r.content
+        }));
+        return textResult(JSON.stringify(results, null, 2));
+    }
+);
+
+// ===== enrich_contact =====
+server.tool(
+    'enrich_contact',
+    'Find email for a person using Hunter.io Email Finder. Returns { email, source } or { email: null } if not found.',
+    {
+        firstName: z.string().describe('First name'),
+        lastName: z.string().describe('Last name'),
+        domain: z.string().describe('Company domain (e.g. stripe.com)')
+    },
+    async ({ firstName, lastName, domain }) => {
+        const apiKey = process.env.HUNTER_API_KEY;
+        if (!apiKey) return textResult('ERROR: HUNTER_API_KEY not set.');
+        const url = `https://api.hunter.io/v2/email-finder?domain=${encodeURIComponent(domain)}&first_name=${encodeURIComponent(firstName)}&last_name=${encodeURIComponent(lastName)}&api_key=${apiKey}`;
+        const res = await fetch(url);
+        if (!res.ok) return textResult(JSON.stringify({ email: null, source: 'hunter', error: res.status }));
+        const data = await res.json();
+        const email = data.data?.email || null;
+        const confidence = data.data?.score || 0;
+        return textResult(JSON.stringify({ email, confidence, source: 'hunter' }));
+    }
+);
+
+// ===== send_email =====
+server.tool(
+    'send_email',
+    'Send an email via Gmail SMTP. Requires GMAIL_USER and GMAIL_APP_PASSWORD env vars.',
+    {
+        userId: z.string().describe('Firebase user ID'),
+        leadId: z.string().describe('Lead document ID'),
+        to: z.string().describe('Recipient email address'),
+        subject: z.string().describe('Email subject'),
+        body: z.string().describe('Email body (plain text)')
+    },
+    async ({ userId, leadId, to, subject, body }) => {
+        const transport = getMailTransport();
+        if (!transport) return textResult('ERROR: Gmail not configured. Set GMAIL_USER and GMAIL_APP_PASSWORD.');
+        try {
+            await transport.sendMail({
+                from: process.env.GMAIL_USER,
+                to,
+                subject,
+                text: body
+            });
+            // Mark lead as done after successful send
+            await leadsRef(userId).doc(leadId).update({
+                done: true,
+                sentAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            const key = todayKey();
+            await profileRef(userId).update({
+                [key]: admin.firestore.FieldValue.increment(1)
+            });
+            return textResult(`Email sent to ${to}. Lead ${leadId} marked done.`);
+        } catch (err) {
+            return textResult(`ERROR sending email: ${err.message}`);
+        }
+    }
+);
 
 // ===== get_skill =====
 server.tool(
@@ -64,21 +161,27 @@ server.tool(
 // ===== save_leads =====
 server.tool(
     'save_leads',
-    'Save new leads to Firestore. Deduplicates against existing leads by LinkedIn URL.',
+    'Save new leads to Firestore. Deduplicates by LinkedIn URL and email. Supports optional email, channel, and enrichmentSource fields.',
     {
         userId: z.string().describe('Firebase user ID'),
         leads: z.array(z.object({
             name: z.string(),
             company: z.string(),
-            linkedin: z.string()
+            linkedin: z.string().optional().default(''),
+            role: z.string().optional().default(''),
+            email: z.string().optional().default(''),
+            channel: z.enum(['email', 'linkedin']).optional().default('linkedin'),
+            enrichmentSource: z.enum(['hunter', 'none']).optional().default('none')
         })).describe('Array of leads to save')
     },
     async ({ userId, leads }) => {
         const existing = await leadsRef(userId).get();
         const existingUrls = new Set();
+        const existingEmails = new Set();
         existing.forEach(doc => {
-            const url = doc.data().linkedin;
-            if (url) existingUrls.add(url.toLowerCase());
+            const d = doc.data();
+            if (d.linkedin) existingUrls.add(d.linkedin.toLowerCase());
+            if (d.email) existingEmails.add(d.email.toLowerCase());
         });
 
         let added = 0;
@@ -86,18 +189,19 @@ server.tool(
         const batch = db.batch();
 
         for (const lead of leads) {
-            if (existingUrls.has(lead.linkedin.toLowerCase())) {
-                skipped++;
-                continue;
-            }
+            if (lead.linkedin && existingUrls.has(lead.linkedin.toLowerCase())) { skipped++; continue; }
+            if (lead.email && existingEmails.has(lead.email.toLowerCase())) { skipped++; continue; }
             const ref = leadsRef(userId).doc();
             batch.set(ref, {
                 name: lead.name,
                 company: lead.company,
+                role: lead.role,
                 linkedin: lead.linkedin,
+                email: lead.email,
+                channel: lead.email ? 'email' : 'linkedin',
+                enrichmentSource: lead.enrichmentSource,
                 message: '',
                 done: false,
-                channel: 'linkedin',
                 createdAt: admin.firestore.FieldValue.serverTimestamp(),
                 sentAt: null
             });
@@ -127,7 +231,7 @@ server.tool(
 // ===== mark_lead_done =====
 server.tool(
     'mark_lead_done',
-    'Mark a lead as done after outreach is sent. Increments the daily LinkedIn counter.',
+    'Mark a lead as done after outreach is sent. Increments the daily outreach counter.',
     {
         userId: z.string().describe('Firebase user ID'),
         leadId: z.string().describe('Lead document ID')

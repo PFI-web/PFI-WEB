@@ -5,6 +5,7 @@
   "type": "module",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "firebase-admin": "^13.0.0"
+    "firebase-admin": "^13.0.0",
+    "nodemailer": "^8.0.2"
   }
 }

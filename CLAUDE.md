@@ -61,26 +61,42 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 ### Architecture
 - **Portal** writes tasks to `users/{uid}/tasks/` in Firestore
 - **Claude Code** polls for tasks via MCP `poll_tasks` tool every 10s
-- **Claude Code** executes tasks using MCP tools (Firestore) + Playwright (LinkedIn browser)
+- **Claude Code** executes tasks using MCP tools + external APIs + Playwright (LinkedIn fallback)
 - **Portal** updates in real time via Firestore `onSnapshot` listener
 
+### Lead Discovery & Outreach Flow
+1. **Find Leads** → Tavily web search (API, no browser) discovers companies/projects
+2. Agent identifies key people at target companies
+3. **Hunter** tries to find verified email for each person
+4. Email found → `channel: 'email'` | No email → Playwright searches LinkedIn → `channel: 'linkedin'`
+5. **Outreach**: email leads sent via Gmail SMTP, LinkedIn leads sent via Playwright
+
 ### MCP Server (`Tools/mcp-server/index.js`)
-8 tools exposed:
+11 tools exposed:
+- `search_web(query)` — Tavily API web search, returns structured results
+- `enrich_contact(firstName, lastName, domain)` — Hunter email finder, returns email or null
+- `send_email(userId, leadId, to, subject, body)` — Gmail SMTP send, auto-marks lead done
 - `get_skill(userId)` — Read user's skill document
 - `get_pending_leads(userId, needsMessage?)` — Get leads where done=false
-- `save_leads(userId, leads[])` — Save new leads with dedup by LinkedIn URL
+- `save_leads(userId, leads[])` — Save new leads with dedup by LinkedIn URL and email
 - `save_message(userId, leadId, message)` — Save message to a lead
 - `mark_lead_done(userId, leadId)` — Set done=true, sentAt, increment daily counter, enforce limit
 - `get_daily_count(userId)` — Today's count + limit + remaining
 - `poll_tasks(userId)` — Check for pending tasks
 - `complete_task(userId, taskName)` — Mark task as complete
 
+### Environment Variables (MCP Server)
+- `TAVILY_API_KEY` — Tavily web search
+- `HUNTER_API_KEY` — Hunter.io email finder
+- `GMAIL_USER` — Gmail address for outreach
+- `GMAIL_APP_PASSWORD` — Gmail app password
+
 ### Firestore Data Model
 - `company/employees` — `{ list: [{ name, role, email }] }`
 - `company/config` — `{ skillTemplate: "..." }` with `{{name}}` and `{{role}}` placeholders
 - `users/{uid}/profile/main` — `{ onboarded, skill, name, role, linkedinLimit, linkedin_YYYY-MM-DD, claudeStarted }`
 - `users/{uid}/profile/search` — `{ role, industry, companyType, count }` (persisted search criteria)
-- `users/{uid}/leads/{leadId}` — `{ name, company, linkedin, message, done, channel, createdAt, sentAt }`
+- `users/{uid}/leads/{leadId}` — `{ name, company, role, linkedin, email, channel, enrichmentSource, message, done, createdAt, sentAt }`
 - `users/{uid}/tasks/{taskName}` — `{ status: "pending"|"complete", createdAt }`
 
 ### Firestore Rules
