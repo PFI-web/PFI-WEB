@@ -508,6 +508,12 @@
 
         const db = firebase.firestore();
 
+        // Helpers
+        const userDoc = () => db.collection('users').doc(currentUser.uid);
+        const profileDoc = () => userDoc().collection('profile').doc('main');
+        const leadsCol = () => userDoc().collection('leads');
+        const tasksCol = () => userDoc().collection('tasks');
+
         let currentUser = null;
         let selectedEmployee = null;
         let onboardingSteps = { 2: false, 3: false, 4: false };
@@ -522,8 +528,8 @@
 
         // Route user to the right screen based on their state
         async function routeUser() {
-            const profileDoc = await db.collection('users').doc(currentUser.uid).collection('profile').doc('main').get();
-            const data = profileDoc.exists ? profileDoc.data() : {};
+            const profile = await profileDoc().get();
+            const data = profile.exists ? profile.data() : {};
 
             // DISABLED: auto-skip logic — always show onboarding flow for now
             // if (!data.onboarded) {
@@ -605,7 +611,7 @@
         }
 
         async function completeOnboarding() {
-            await db.collection('users').doc(currentUser.uid).collection('profile').doc('main').set({
+            await profileDoc().set({
                 onboarded: true,
                 skill: userSkill,
                 name: selectedEmployee.name,
@@ -624,9 +630,7 @@
         }
 
         async function completeSetup() {
-            await db.collection('users').doc(currentUser.uid).collection('profile').doc('main').update({
-                claudeStarted: true
-            });
+            await profileDoc().update({ claudeStarted: true });
             initDashboard();
         }
 
@@ -641,8 +645,8 @@
         async function updateCounter() {
             const today = new Date().toISOString().split('T')[0];
             const key = 'linkedin_' + today;
-            const profileDoc = await db.collection('users').doc(currentUser.uid).collection('profile').doc('main').get();
-            const data = profileDoc.exists ? profileDoc.data() : {};
+            const profile = await profileDoc().get();
+            const data = profile.exists ? profile.data() : {};
             const count = data[key] || 0;
             const limit = data.linkedinLimit || 20;
             const el = document.getElementById('topbarCounter');
@@ -654,7 +658,7 @@
 
         function listenToLeads() {
             if (leadsUnsubscribe) leadsUnsubscribe();
-            const leadsRef = db.collection('users').doc(currentUser.uid).collection('leads').orderBy('createdAt', 'desc');
+            const leadsRef = leadsCol().orderBy('createdAt', 'desc');
             leadsUnsubscribe = leadsRef.onSnapshot(snapshot => {
                 const tbody = document.getElementById('leadTableBody');
                 const empty = document.getElementById('emptyState');
@@ -678,12 +682,12 @@
                     autoResize(ta);
                     ta.addEventListener('input', () => autoResize(ta));
                     ta.addEventListener('blur', () => {
-                        db.collection('users').doc(currentUser.uid).collection('leads').doc(ta.dataset.id).update({ message: ta.value });
+                        leadsCol().doc(ta.dataset.id).update({ message: ta.value });
                     });
                 });
                 tbody.querySelectorAll('.status-badge.pending').forEach(badge => {
                     badge.addEventListener('click', () => {
-                        db.collection('users').doc(currentUser.uid).collection('leads').doc(badge.dataset.id).update({
+                        leadsCol().doc(badge.dataset.id).update({
                             done: true, sentAt: firebase.firestore.FieldValue.serverTimestamp()
                         });
                         incrementDailyCount();
@@ -696,7 +700,7 @@
 
         async function incrementDailyCount() {
             const today = new Date().toISOString().split('T')[0];
-            await db.collection('users').doc(currentUser.uid).collection('profile').doc('main').update({
+            await profileDoc().update({
                 ['linkedin_' + today]: firebase.firestore.FieldValue.increment(1)
             });
             updateCounter();
@@ -715,7 +719,7 @@
             const company = document.getElementById('leadCompany').value.trim();
             const linkedin = document.getElementById('leadLinkedin').value.trim();
             if (!name) return;
-            await db.collection('users').doc(currentUser.uid).collection('leads').add({
+            await leadsCol().add({
                 name, company, linkedin,
                 message: '', done: false, channel: 'linkedin',
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(), sentAt: null
@@ -725,7 +729,7 @@
 
         // ===== FIND LEADS =====
         async function openFindLeadsModal() {
-            const searchDoc = await db.collection('users').doc(currentUser.uid).collection('profile').doc('search').get();
+            const searchDoc = await userDoc().collection('profile').doc('search').get();
             if (searchDoc.exists) {
                 const s = searchDoc.data();
                 document.getElementById('findRole').value = s.role || '';
@@ -748,8 +752,8 @@
             const industry = document.getElementById('findIndustry').value.trim();
             const companyType = document.getElementById('findCompanyType').value.trim();
             const count = parseInt(document.getElementById('findCount').value) || 10;
-            await db.collection('users').doc(currentUser.uid).collection('profile').doc('search').set({ role, industry, companyType, count });
-            await db.collection('users').doc(currentUser.uid).collection('tasks').doc('findLeads').set({
+            await userDoc().collection('profile').doc('search').set({ role, industry, companyType, count });
+            await tasksCol().doc('findLeads').set({
                 status: 'pending', role, industry, companyType, count,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
@@ -760,21 +764,21 @@
         // ===== LIMITS =====
         function openLimitsModal() {
             openModal('limitsModal');
-            db.collection('users').doc(currentUser.uid).collection('profile').doc('main').get().then(doc => {
+            profileDoc().get().then(doc => {
                 if (doc.exists) document.getElementById('limitLinkedin').value = doc.data().linkedinLimit || 20;
             });
         }
 
         async function saveLimits() {
             const limit = parseInt(document.getElementById('limitLinkedin').value) || 20;
-            await db.collection('users').doc(currentUser.uid).collection('profile').doc('main').update({ linkedinLimit: limit });
+            await profileDoc().update({ linkedinLimit: limit });
             updateCounter();
             closeModal('limitsModal');
         }
 
         // ===== WRITE MESSAGES =====
         async function openWriteMessagesModal() {
-            await db.collection('users').doc(currentUser.uid).collection('tasks').doc('writeMessages').set({
+            await tasksCol().doc('writeMessages').set({
                 status: 'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
             openModal('writeMessagesModal');
@@ -782,11 +786,11 @@
 
         // ===== PERFORM OUTREACH =====
         async function openOutreachModal() {
-            const snapshot = await db.collection('users').doc(currentUser.uid).collection('leads').where('done', '==', false).get();
+            const snapshot = await leadsCol().where('done', '==', false).get();
             let ready = 0;
             snapshot.forEach(doc => { if (doc.data().message) ready++; });
             document.getElementById('outreachSummary').textContent = `${ready} lead${ready !== 1 ? 's' : ''} ready to send.`;
-            await db.collection('users').doc(currentUser.uid).collection('tasks').doc('performOutreach').set({
+            await tasksCol().doc('performOutreach').set({
                 status: 'pending', createdAt: firebase.firestore.FieldValue.serverTimestamp()
             });
             openModal('outreachModal');

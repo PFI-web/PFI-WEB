@@ -1196,8 +1196,7 @@
             window.scrollTo({ top: top, behavior: 'smooth' });
         }
 
-        const scrollOffset1 = 40;
-        const scrollOffset2 = 40;
+        const scrollOffset = 40;
 
         // Flipper — click arrows to slide between pages
         const flipperTrack = document.getElementById('flipperTrack');
@@ -1230,7 +1229,7 @@
             flipper1Pages[0].classList.add('fade-out');
 
             // Scroll up smoothly first
-            scrollToWithOffset(document.getElementById('flipper'), scrollOffset1);
+            scrollToWithOffset(document.getElementById('flipper'), scrollOffset);
 
             // Slide the track after a brief moment
             setTimeout(() => {
@@ -1250,7 +1249,7 @@
             flipper1Pages[0].classList.remove('fade-out');
 
             // Scroll up smoothly first
-            scrollToWithOffset(document.getElementById('flipper'), scrollOffset1);
+            scrollToWithOffset(document.getElementById('flipper'), scrollOffset);
 
             setTimeout(() => {
                 flipperTrack.style.transform = 'translateX(0)';
@@ -1290,7 +1289,7 @@
             flipper2Pages[0].classList.add('fade-out');
 
             // Scroll up smoothly first
-            scrollToWithOffset(document.getElementById('flipper2'), scrollOffset2);
+            scrollToWithOffset(document.getElementById('flipper2'), scrollOffset);
 
             // Slide the track after a brief moment
             setTimeout(() => {
@@ -1309,7 +1308,7 @@
             flipper2Pages[0].classList.remove('fade-out');
 
             // Scroll up smoothly first
-            scrollToWithOffset(document.getElementById('flipper2'), scrollOffset2);
+            scrollToWithOffset(document.getElementById('flipper2'), scrollOffset);
 
             // Slide back after a brief moment
             setTimeout(() => {

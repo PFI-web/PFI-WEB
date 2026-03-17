@@ -16,6 +16,14 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
+// Helpers
+const userRef = (uid) => db.collection('users').doc(uid);
+const profileRef = (uid) => userRef(uid).collection('profile').doc('main');
+const leadsRef = (uid) => userRef(uid).collection('leads');
+const tasksRef = (uid) => userRef(uid).collection('tasks');
+const textResult = (text) => ({ content: [{ type: 'text', text }] });
+const todayKey = () => 'linkedin_' + new Date().toISOString().split('T')[0];
+
 const server = new McpServer({
     name: 'pfi-outreach',
     version: '1.0.0'
@@ -27,9 +35,9 @@ server.tool(
     'Read the user skill document from Firestore',
     { userId: z.string().describe('Firebase user ID') },
     async ({ userId }) => {
-        const doc = await db.collection('users').doc(userId).collection('profile').doc('main').get();
-        if (!doc.exists) return { content: [{ type: 'text', text: 'No profile found.' }] };
-        return { content: [{ type: 'text', text: doc.data().skill || 'No skill document found.' }] };
+        const doc = await profileRef(userId).get();
+        if (!doc.exists) return textResult('No profile found.');
+        return textResult(doc.data().skill || 'No skill document found.');
     }
 );
 
@@ -42,16 +50,14 @@ server.tool(
         needsMessage: z.boolean().optional().describe('If true, only return leads with empty message field')
     },
     async ({ userId, needsMessage }) => {
-        const snapshot = await db.collection('users').doc(userId).collection('leads')
-            .where('done', '==', false)
-            .get();
+        const snapshot = await leadsRef(userId).where('done', '==', false).get();
         let leads = [];
         snapshot.forEach(doc => {
             const data = doc.data();
             if (needsMessage && data.message) return;
             leads.push({ id: doc.id, ...data });
         });
-        return { content: [{ type: 'text', text: JSON.stringify(leads, null, 2) }] };
+        return textResult(JSON.stringify(leads, null, 2));
     }
 );
 
@@ -68,7 +74,7 @@ server.tool(
         })).describe('Array of leads to save')
     },
     async ({ userId, leads }) => {
-        const existing = await db.collection('users').doc(userId).collection('leads').get();
+        const existing = await leadsRef(userId).get();
         const existingUrls = new Set();
         existing.forEach(doc => {
             const url = doc.data().linkedin;
@@ -84,7 +90,7 @@ server.tool(
                 skipped++;
                 continue;
             }
-            const ref = db.collection('users').doc(userId).collection('leads').doc();
+            const ref = leadsRef(userId).doc();
             batch.set(ref, {
                 name: lead.name,
                 company: lead.company,
@@ -99,7 +105,7 @@ server.tool(
         }
 
         await batch.commit();
-        return { content: [{ type: 'text', text: `Added ${added} leads, skipped ${skipped} duplicates.` }] };
+        return textResult(`Added ${added} leads, skipped ${skipped} duplicates.`);
     }
 );
 
@@ -113,8 +119,8 @@ server.tool(
         message: z.string().describe('The LinkedIn connection note (under 300 chars)')
     },
     async ({ userId, leadId, message }) => {
-        await db.collection('users').doc(userId).collection('leads').doc(leadId).update({ message });
-        return { content: [{ type: 'text', text: `Message saved for lead ${leadId}.` }] };
+        await leadsRef(userId).doc(leadId).update({ message });
+        return textResult(`Message saved for lead ${leadId}.`);
     }
 );
 
@@ -127,29 +133,26 @@ server.tool(
         leadId: z.string().describe('Lead document ID')
     },
     async ({ userId, leadId }) => {
-        const today = new Date().toISOString().split('T')[0];
-        const key = `linkedin_${today}`;
-
-        // Check daily limit
-        const profileDoc = await db.collection('users').doc(userId).collection('profile').doc('main').get();
+        const key = todayKey();
+        const profileDoc = await profileRef(userId).get();
         const data = profileDoc.exists ? profileDoc.data() : {};
         const count = data[key] || 0;
         const limit = data.linkedinLimit || 20;
 
         if (count >= limit) {
-            return { content: [{ type: 'text', text: `LIMIT_REACHED: Daily limit of ${limit} hit. Stop sending.` }] };
+            return textResult(`LIMIT_REACHED: Daily limit of ${limit} hit. Stop sending.`);
         }
 
-        await db.collection('users').doc(userId).collection('leads').doc(leadId).update({
+        await leadsRef(userId).doc(leadId).update({
             done: true,
             sentAt: admin.firestore.FieldValue.serverTimestamp()
         });
 
-        await db.collection('users').doc(userId).collection('profile').doc('main').update({
+        await profileRef(userId).update({
             [key]: admin.firestore.FieldValue.increment(1)
         });
 
-        return { content: [{ type: 'text', text: `Lead ${leadId} marked done. Count: ${count + 1}/${limit}.` }] };
+        return textResult(`Lead ${leadId} marked done. Count: ${count + 1}/${limit}.`);
     }
 );
 
@@ -159,13 +162,12 @@ server.tool(
     'Get today\'s LinkedIn send count and the daily limit',
     { userId: z.string().describe('Firebase user ID') },
     async ({ userId }) => {
-        const today = new Date().toISOString().split('T')[0];
-        const key = `linkedin_${today}`;
-        const doc = await db.collection('users').doc(userId).collection('profile').doc('main').get();
+        const key = todayKey();
+        const doc = await profileRef(userId).get();
         const data = doc.exists ? doc.data() : {};
         const count = data[key] || 0;
         const limit = data.linkedinLimit || 20;
-        return { content: [{ type: 'text', text: JSON.stringify({ count, limit, remaining: limit - count }) }] };
+        return textResult(JSON.stringify({ count, limit, remaining: limit - count }));
     }
 );
 
@@ -177,12 +179,12 @@ server.tool(
     async ({ userId }) => {
         const tasks = ['findLeads', 'writeMessages', 'performOutreach'];
         for (const taskName of tasks) {
-            const doc = await db.collection('users').doc(userId).collection('tasks').doc(taskName).get();
+            const doc = await tasksRef(userId).doc(taskName).get();
             if (doc.exists && doc.data().status === 'pending') {
-                return { content: [{ type: 'text', text: JSON.stringify({ task: taskName, ...doc.data() }) }] };
+                return textResult(JSON.stringify({ task: taskName, ...doc.data() }));
             }
         }
-        return { content: [{ type: 'text', text: JSON.stringify({ task: 'none' }) }] };
+        return textResult(JSON.stringify({ task: 'none' }));
     }
 );
 
@@ -195,11 +197,11 @@ server.tool(
         taskName: z.string().describe('Task name: findLeads, writeMessages, or performOutreach')
     },
     async ({ userId, taskName }) => {
-        await db.collection('users').doc(userId).collection('tasks').doc(taskName).update({
+        await tasksRef(userId).doc(taskName).update({
             status: 'complete',
             completedAt: admin.firestore.FieldValue.serverTimestamp()
         });
-        return { content: [{ type: 'text', text: `Task ${taskName} marked complete.` }] };
+        return textResult(`Task ${taskName} marked complete.`);
     }
 );
 
