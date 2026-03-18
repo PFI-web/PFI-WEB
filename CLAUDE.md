@@ -65,21 +65,26 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - **Claude Code** executes tasks using MCP tools + external APIs + Playwright (lead discovery only)
 - **Portal** updates in real time via Firestore `onSnapshot` listeners (leads table + daily counters)
 
-### Lead Discovery & Outreach Flow (Signal-First)
+### Lead Discovery & Outreach Flow (Signal-First, Fund-Level Targeting)
+**Core principle:** The developer/operator is the evidence that pain exists. The institutional fund behind them is the customer. The tool finds both, but outreach goes to the fund.
+
+**Pressure chain:** Project in permitting pain → Developer/operator → Who funded them → Fund-level contact
+
 1. **Find Leads** → Agent searches for signal strength first: FERC queues, permits.performance.gov delayed milestones, state permit databases (TCEQ/GA EPD/AZ DEQ), ISO interconnection queues (ERCOT/MISO/SPP/Georgia Power/APS/SRP), capital commitments — focused on TX, GA, AZ
 2. Each company classified as **Active Pain** (stuck in permitting now) or **Capital Pattern** (repeat builder, next project coming)
-3. Agent finds the strongest contact — the ONE person most accountable for permitting timelines or capital deployment
-4. For each person: **always** get LinkedIn profile via Playwright, **then** try Hunter for email
-5. Email found → `channel: 'email'`, lead has both email + LinkedIn | No email → `channel: 'linkedin'`, LinkedIn only
-6. **Outreach**: Agent sends emails via Gmail SMTP only. LinkedIn connection requests are **manual** — user sends them and clicks the LinkedIn icon in the dashboard to mark complete.
+3. **Institutional backer lookup** — After confirming permitting pain, agent searches for the PE fund / infrastructure investor behind the company (e.g. "[Company] equity partner", "[Company] backed by", "[Company] investors"). Looking for names like Stonepeak, Brookfield, KKR, Apollo, etc. If not found after 3 searches → "backer not found" (row still saved)
+4. Agent finds up to TWO fund-level contacts per firm — **Asset Manager** (priority 1: recalculates the pro forma when permits slip, provides raw data to IR) and **Investor Relations Manager** (priority 2: faces the LPs, explains underperformance, maintains the firm's narrative). Both saved as separate leads when found. If neither role is found at the fund, skip the company and move on
+5. For each person: **always** get LinkedIn profile via Playwright, **then** try Hunter for email
+6. Email found → `channel: 'email'`, lead has both email + LinkedIn | No email → `channel: 'linkedin'`, LinkedIn only
+7. **Outreach**: Agent sends emails via Gmail SMTP only. LinkedIn connection requests are **manual** — user sends them and clicks the LinkedIn icon in the dashboard to mark complete.
 
 ### Proof Sheet (Boss Cross-Check)
 - **"Proof Sheet" button** on dashboard — runs the same signal-first discovery pipeline but writes to a Google Sheet instead of the leads database
 - Modal: count input + helper text (Google Sheet ID is hardcoded: `1VjCQBw86I8vTTbqyJ8EyJI4XnbaZbnge2ihGsDud2uI`)
 - Task type: `proofSheet` with `{ status, count, spreadsheetId, createdAt }`
 - **Two tabs** in the Google Sheet — rows are routed by classification:
-  - **Active Pain** tab columns: Company, What They're Building, Where, Why They're Hurting, Proof, Contact, LinkedIn, Thought Process
-  - **Capital Pattern** tab columns: Company, What They Keep Doing, Where, Why PFI Matters To Them, Proof, Contact, LinkedIn, Thought Process
+  - **Active Pain** tab columns: Company, What They're Building, Where, Why They're Hurting, Proof, Contact, Institutional Backer, LinkedIn, Thought Process
+  - **Capital Pattern** tab columns: Company, What They Keep Doing, Where, Why PFI Matters To Them, Proof, Contact, Institutional Backer, LinkedIn, Thought Process
 - Multi-line fields: `why_they_are_hurting`, `why_pfi_matters`, and `thought_process` render with line breaks in the sheet (`USER_ENTERED` mode)
 - Tabs and headers are created automatically by the MCP tool
 - Results written incrementally as the agent finds them (not batched at the end)
@@ -115,13 +120,13 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - `send_email(userId, leadId, to, subject, body)` — Gmail SMTP send, sets `emailSent: true`, only sets `done: true` if LinkedIn is also complete (or not applicable). Enforces daily email limit
 - `get_skill(userId)` — Read user's skill document
 - `get_pending_leads(userId, needsMessage?)` — Get leads where done=false
-- `save_leads(userId, leads[])` — Save new leads with dedup by LinkedIn URL and email
+- `save_leads(userId, leads[])` — Save new leads with dedup by LinkedIn URL and email. Includes `institutionalBacker` field for the PE fund/investor behind the company
 - `save_message(userId, leadId, message, subject?, linkedinNote?)` — Save outreach message to a lead. Email leads: `message` (body) + `subject` + optional `linkedinNote`. LinkedIn-only leads: `message` (connection note under 300 chars)
 - `mark_lead_done(userId, leadId)` — Sets `linkedinSent: true`, only sets `done: true` if email is also complete (or not applicable). Increments daily LinkedIn counter, enforces limit
 - `get_daily_count(userId)` — Today's LinkedIn + email counts, limits, and remaining
 - `poll_tasks(userId)` — Check for pending tasks
 - `complete_task(userId, taskName)` — Mark task as complete
-- `write_proof_sheet(spreadsheetId, rows[])` — Append rows to a Google Sheet. Each row includes a `tab` field (`"Active Pain"` or `"Capital Pattern"`) and tab-specific columns (8 per tab, including Thought Process). Auto-creates tabs and headers. Uses `USER_ENTERED` mode for multi-line cell support.
+- `write_proof_sheet(spreadsheetId, rows[])` — Append rows to a Google Sheet. Each row includes a `tab` field (`"Active Pain"` or `"Capital Pattern"`) and tab-specific columns (9 per tab, including Institutional Backer and Thought Process). Auto-creates tabs and headers. Uses `USER_ENTERED` mode for multi-line cell support.
 
 ### Environment Variables (MCP Server)
 - `TAVILY_API_KEY` — Tavily web search
@@ -133,13 +138,14 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - `company/employees` — `{ list: [{ name, role, email }] }`
 - `company/config` — `{ skillTemplate: "..." }` with `{{name}}` and `{{role}}` placeholders
 - `users/{uid}/profile/main` — `{ onboarded, skill, name, role, linkedinLimit, emailLimit, linkedin_YYYY-MM-DD, email_YYYY-MM-DD, claudeStarted }`
-- `users/{uid}/leads/{leadId}` — `{ name, company, role, linkedin, email, channel, enrichmentSource, message, emailSubject, linkedinNote, emailSent, emailSentAt, linkedinSent, linkedinSentAt, done, createdAt, sentAt }`
+- `users/{uid}/leads/{leadId}` — `{ name, company, role, linkedin, email, institutionalBacker, channel, enrichmentSource, message, emailSubject, linkedinNote, emailSent, emailSentAt, linkedinSent, linkedinSentAt, done, createdAt, sentAt }`
 - `users/{uid}/tasks/{taskName}` — `{ status: "pending"|"complete", createdAt }`. Task names: `findLeads` (+ count), `writeMessages`, `performOutreach`, `proofSheet` (+ count, spreadsheetId)
 
 ### Testing Mode
 **Currently active.** Both `Tools/mcp-server/index.js` and `Team/index.html` have a `ROOT_COLLECTION` constant set to `'test'` instead of `'users'`. This routes all reads/writes to the `test` Firestore collection. Test data seeded via `Tools/seed/seed-test.js`. **Switch back to `'users'` in both files when done testing.**
 
 ### Dashboard UI
+- Lead table columns: Name | Role | Company | Backer | Channel | Contact | Message | Status
 - Lead table with real-time Firestore `onSnapshot` listeners
 - Message modal (popup) for viewing/editing email and LinkedIn messages separately
 - Status column: Pending (gray) → partial (yellow, "Email Sent" or "LinkedIn Sent") → Done (green)

@@ -64,28 +64,37 @@ Poll for tasks using `poll_tasks` every 10 seconds. If no tasks are pending, wai
    - **Active Pain** — The project is currently stuck in permitting. Something is delayed, contested, or blocked right now.
    - **Capital Pattern** — This company keeps doing these projects. The next one is coming and they will hit the same permitting friction again.
 
-4. **Find the strongest contact** — For each company, find the ONE person most accountable for permitting timelines or capital deployment. Do NOT target operators, construction managers, or general executives. The target answers: *"Is this project going to get its permits on time and what happens to returns if it doesn't?"*
+4. **Find the institutional backer** — The developer/operator is the *evidence* that pain exists. The *customer* is the fund behind them. After confirming a company has permitting pain, run a second lookup to find the institutional backer (PE fund, infrastructure fund, or institutional investor). Run these searches using `search_web`:
+   - `"[Company name] equity partner"`
+   - `"[Company name] backed by"`
+   - `"[Company name] investors"`
+   - `"[Company name] funding"`
+   - `"[Company name] capital raise"`
+   - `"[Company name] Pitchbook"`
 
-   **At the operator/developer**, target:
-   - VP of Development
-   - Head of Real Estate / Site Acquisition
-   - Director of Permitting or Entitlements
-   - SVP of Planning or Land Use
+   You're looking for names like Stonepeak, Brookfield, KKR, Apollo, Blackstone Infrastructure, Arclight, Energy Capital Partners — that category of institution. If you cannot find a backer after three searches, set the institutional backer to `"backer not found"` and move on. Do NOT skip the row — the project signal is still valuable.
 
-   **On the capital/fund side**, target:
-   - Fund Principal or Partner (infrastructure fund)
-   - VP of Development or Acquisitions
-   - Head of Infrastructure Investments
+5. **Find fund-level contacts** — The outreach goes to the fund, not the developer. For the institutional backer identified in step 4, find up to TWO people at the fund — ideally both roles below. These are the people who feel permit friction pain the most:
 
-   For each target company, use `search_web` to find people in these specific roles.
+   **Priority 1: Asset Manager** (must find)
+   - Titles: Asset Manager, VP Asset Management, Director of Asset Management, Senior Asset Manager, Portfolio Asset Manager
+   - Why them: They sit between the Project Manager and Investor Relations. When the PM says "permits are delayed," the Asset Manager recalculates the financial model (pro forma) to see how much IRR has dropped. They provide the raw data and reasons to IR so they can communicate a coherent story to the LPs. PFI gives them the tool to model permitting risk before it hits the financial model.
 
-5. **Enrich contacts** — For each person found, always collect both LinkedIn and email:
-   a. **LinkedIn (Playwright only)** — Use Playwright to open linkedin.com/search and search for the person by name + company. Grab their profile URL from the results. **Never use `search_web`/Tavily to find LinkedIn profiles** — Tavily does not reliably return LinkedIn URLs.
-   b. Call `enrich_contact` with their first name, last name, and company domain
+   **Priority 2: Investor Relations (IR) Manager** (find if possible)
+   - Titles: Investor Relations Manager, VP Investor Relations, Director of Investor Relations, Head of IR, IR Associate
+   - Why them: They are the "face" to the fund's capital providers (LPs). When projects underperform due to permit delays, they field the incoming messages from angry LPs, prepare quarterly reports explaining the shortfall, and maintain the firm's narrative. PFI gives them data to quantify and communicate permitting risk before it becomes a surprise.
+
+   **Search strategy:** Always search for the Asset Manager first. Then search for the IR Manager at the same fund. If you find both, save both as separate leads (same company, same institutional backer, different contacts). If you can only find one, that's still a valid lead. If neither is found at the fund, skip this company entirely and move on to the next one. Do NOT fall back to developer/operator contacts.
+
+   For each target, use `search_web` to find people in these specific roles.
+
+6. **Enrich contacts** — For each person found, always collect both LinkedIn and email:
+   a. **LinkedIn (Playwright only)** — Use Playwright to open linkedin.com/search and search for the person by name + company (use the fund name, not the developer). Grab their profile URL from the results. **Never use `search_web`/Tavily to find LinkedIn profiles** — Tavily does not reliably return LinkedIn URLs.
+   b. Call `enrich_contact` with their first name, last name, and the fund's domain (or the developer's domain if no backer found)
    c. If Hunter returns an email → set `channel: 'email'`, `enrichmentSource: 'hunter'` (lead has both email and LinkedIn)
    d. If no email found → set `channel: 'linkedin'`, `enrichmentSource: 'none'` (lead has LinkedIn only)
-6. **Save leads** — Call `save_leads` with all results. Every lead must have at minimum: name, company, role, and a LinkedIn URL. Email is a bonus from Hunter.
-7. Call `complete_task`
+7. **Save leads** — Call `save_leads` with all results. Every lead must have at minimum: name, company (the fund name, or developer if no backer found), role, institutionalBacker, and a LinkedIn URL. Email is a bonus from Hunter. The `company` field should be the fund when a backer is found. Include the developer company name in the lead context so it's clear which project the pain comes from. When both an Asset Manager and IR Manager are found for the same fund, save them as two separate leads.
+8. Call `complete_task`
 
 ### writeMessages
 1. Call `get_skill` to get the user's messaging style
@@ -111,33 +120,36 @@ This task is a **proof-of-concept** version of findLeads. It runs the same signa
 1. Read the task data (count, spreadsheetId). The `count` is the **exact number of companies** to return — no more, no less.
 2. **Search for signal strength first** — Same logic as findLeads. Use `search_web` to hunt for the strongest signals across FERC queues, permits.performance.gov, state permit databases (TCEQ/GA EPD/AZ DEQ), ISO interconnection queues (ERCOT/MISO/SPP/Georgia Power/APS/SRP), and capital commitments — focused on TX, GA, AZ. Only run enough searches to fill the count. **Same source credibility rule as findLeads** — no source URL, no save.
 3. **Classify each result** — Decide: **Active Pain** (project currently stuck in permitting) or **Capital Pattern** (repeat builder, next project coming).
-4. **Find the strongest contact** — For each company, find the ONE best person (same targeting rules as findLeads). Use Playwright to find their LinkedIn profile URL.
-5. **Write to Google Sheet as results come in** — Do NOT wait until everything is found. Call `write_proof_sheet` as soon as you have results. Each row must include a `tab` field set to either `"Active Pain"` or `"Capital Pattern"`.
+4. **Find the institutional backer** — Same logic as findLeads step 4. After confirming permitting pain, run searches to find the PE fund or infrastructure investor behind the company. If not found after three searches, set to `"backer not found"` and continue.
+5. **Find fund-level contacts** — Same targeting rules as findLeads step 5. Find up to two people at the fund: Asset Manager (priority 1) then IR Manager (priority 2). Use Playwright to find their LinkedIn profile URLs. If both are found, write separate rows for each. If neither is found at the fund, skip this company and move on to the next.
+6. **Write to Google Sheet as results come in** — Do NOT wait until everything is found. Call `write_proof_sheet` as soon as you have results. Each row must include a `tab` field set to either `"Active Pain"` or `"Capital Pattern"`.
 
    **Active Pain rows:**
    - `tab`: `"Active Pain"`
-   - `company`: Who they are
+   - `company`: Who they are (the developer/operator with the pain)
    - `what_they_are_building`: The actual project
    - `where`: TX / GA / AZ
    - `why_they_are_hurting`: What's stuck and how long. Use `\n` line breaks to separate points — this field renders multi-line in the sheet.
    - `proof`: The source URL
-   - `contact`: Best person to reach, name only
+   - `contact`: Best person to reach at the **fund** (or developer if no backer found), name only
+   - `institutional_backer`: The PE fund, infrastructure fund, or investor behind this company. `"backer not found"` if unknown.
    - `linkedin`: Their LinkedIn URL
-   - `thought_process`: 3–4 sentences explaining why you picked this company and why you picked this contact. Use `\n` line breaks between sentences — this field renders multi-line in the sheet.
+   - `thought_process`: 3–4 sentences explaining why you picked this company, who the institutional backer is, and why this fund-level contact is the right person. Use `\n` line breaks between sentences — this field renders multi-line in the sheet.
 
    **Capital Pattern rows:**
    - `tab`: `"Capital Pattern"`
-   - `company`: Who they are
+   - `company`: Who they are (the developer/operator)
    - `what_they_keep_doing`: One sentence — their pattern
    - `where`: TX / GA / AZ
    - `why_pfi_matters`: Why the next project is coming. Use `\n` line breaks to separate points — this field renders multi-line in the sheet.
    - `proof`: The source URL
-   - `contact`: Best person to reach, name only
+   - `contact`: Best person to reach at the **fund** (or developer if no backer found), name only
+   - `institutional_backer`: The PE fund, infrastructure fund, or investor behind this company. `"backer not found"` if unknown.
    - `linkedin`: Their LinkedIn URL
-   - `thought_process`: 3–4 sentences explaining why you picked this company and why you picked this contact. Use `\n` line breaks between sentences — this field renders multi-line in the sheet.
+   - `thought_process`: 3–4 sentences explaining why you picked this company, who the institutional backer is, and why this fund-level contact is the right person. Use `\n` line breaks between sentences — this field renders multi-line in the sheet.
 
-6. You can call `write_proof_sheet` multiple times so results appear incrementally in the sheet.
-7. Call `complete_task`
+7. You can call `write_proof_sheet` multiple times so results appear incrementally in the sheet.
+8. Call `complete_task`
 
 ## LinkedIn Connect Safety Rules
 

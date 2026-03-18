@@ -399,14 +399,16 @@
                 <button class="action-btn" onclick="openFindLeadsModal()">Find Leads</button>
                 <button class="action-btn" onclick="openAddLeadModal()">Add Lead</button>
                 <button class="action-btn" onclick="openWriteMessagesModal()">Write Messages</button>
-                <button class="action-btn primary" onclick="openOutreachModal()">Perform Outreach</button>
+                <button class="action-btn" disabled style="opacity:0.4;cursor:not-allowed;" title="Manual outreach for now">Perform Outreach</button>
                 <button class="action-btn" onclick="openProofSheetModal()">Proof Sheet</button>
             </div>
             <table class="lead-table" id="leadTable">
                 <thead>
                     <tr>
                         <th>Name</th>
+                        <th>Role</th>
                         <th>Company</th>
+                        <th>Backer</th>
                         <th>Channel</th>
                         <th>Contact</th>
                         <th>Message</th>
@@ -428,8 +430,16 @@
                 <input type="text" id="leadName" placeholder="Full name">
             </div>
             <div class="modal-field">
+                <label>Role</label>
+                <input type="text" id="leadRole" placeholder="e.g. Asset Manager, VP Investor Relations">
+            </div>
+            <div class="modal-field">
                 <label>Company</label>
-                <input type="text" id="leadCompany" placeholder="Company name">
+                <input type="text" id="leadCompany" placeholder="Fund or company name">
+            </div>
+            <div class="modal-field">
+                <label>Institutional Backer</label>
+                <input type="text" id="leadBacker" placeholder="PE fund / investor behind the company">
             </div>
             <div class="modal-field">
                 <label>Email</label>
@@ -455,19 +465,23 @@
                 <div style="font-size: 13px; color: #333; line-height: 2;">
                     <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #F0F0F0;">
                         <span style="width: 22px; height: 22px; border-radius: 50%; background: #1C2B3A; color: #FFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">1</span>
-                        <span><strong>Web Search</strong> — Discover companies via permit filings, FERC queues, and news</span>
+                        <span><strong>Find Pain</strong> — Discover companies via permit filings, FERC queues, and news</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #F0F0F0;">
                         <span style="width: 22px; height: 22px; border-radius: 50%; background: #1C2B3A; color: #FFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">2</span>
-                        <span><strong>Identify People</strong> — Find execs, infrastructure & permitting leads</span>
+                        <span><strong>Find Backer</strong> — Identify the PE fund / institutional investor behind them</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #F0F0F0;">
                         <span style="width: 22px; height: 22px; border-radius: 50%; background: #1C2B3A; color: #FFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">3</span>
-                        <span><strong>Enrich Email</strong> — Hunter.io lookup by name + company domain</span>
+                        <span><strong>Target Contacts</strong> — Find Asset Manager + IR Manager at the fund</span>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #F0F0F0;">
+                        <span style="width: 22px; height: 22px; border-radius: 50%; background: #1C2B3A; color: #FFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">4</span>
+                        <span><strong>LinkedIn</strong> — Find profile URLs via Playwright browser search</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 10px; padding: 8px 0;">
-                        <span style="width: 22px; height: 22px; border-radius: 50%; background: #1C2B3A; color: #FFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">4</span>
-                        <span><strong>Fallback</strong> — LinkedIn profile search if no email found</span>
+                        <span style="width: 22px; height: 22px; border-radius: 50%; background: #1C2B3A; color: #FFF; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">5</span>
+                        <span><strong>Enrich Email</strong> — Hunter.io lookup by name + fund domain</span>
                     </div>
                 </div>
                 <div class="modal-field" style="margin-top: 20px;">
@@ -777,13 +791,16 @@
                     const hasMsg = lead.message || lead.emailSubject || lead.linkedinNote;
                     tr.innerHTML = `
                         <td>${lead.name || ''}</td>
+                        <td><span style="font-size:13px;color:#555;">${lead.role || '—'}</span></td>
                         <td>${lead.company || ''}</td>
+                        <td><span style="font-size:13px;color:#555;">${lead.institutionalBacker || '—'}</span></td>
                         <td><span style="font-size:12px;font-weight:600;padding:3px 8px;border-radius:10px;background:${ch === 'email' ? '#E3F2FD' : '#F0F0F0'};color:${ch === 'email' ? '#1565C0' : '#777'};">${ch === 'email' ? 'Email' : 'LinkedIn'}</span></td>
                         <td>${contactLink}</td>
                         <td><button class="msg-btn ${hasMsg ? '' : 'empty'}" data-id="${doc.id}">${hasMsg ? 'View' : 'No message'}</button></td>
                         <td>
                             <span class="status-badge ${isDone ? 'done' : isPartial ? 'partial' : 'pending'}" data-id="${doc.id}">${isDone ? 'Done' : isPartial ? (lead.emailSent ? 'Email Sent' : 'LinkedIn Sent') : 'Pending'}</span>
-                            ${isPartial && !lead.linkedinSent && lead.linkedin ? `<button class="li-done-btn" data-id="${doc.id}" title="Mark LinkedIn sent"><svg width="14" height="14" viewBox="0 0 24 24" fill="#0A66C2"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></button>` : ''}
+                            ${!isDone && !lead.emailSent && lead.email ? `<button class="em-done-btn" data-id="${doc.id}" title="Mark email sent" style="background:none;border:none;cursor:pointer;margin-left:4px;vertical-align:middle;"><svg width="14" height="14" viewBox="0 0 24 24" fill="#D44638"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/></svg></button>` : ''}
+                            ${!isDone && !lead.linkedinSent && lead.linkedin ? `<button class="li-done-btn" data-id="${doc.id}" title="Mark LinkedIn sent" style="background:none;border:none;cursor:pointer;margin-left:4px;vertical-align:middle;"><svg width="14" height="14" viewBox="0 0 24 24" fill="#0A66C2"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg></button>` : ''}
                         </td>
                     `;
                     tbody.appendChild(tr);
@@ -791,12 +808,17 @@
                 tbody.querySelectorAll('.msg-btn').forEach(btn => {
                     btn.addEventListener('click', () => openMessageModal(btn.dataset.id));
                 });
-                tbody.querySelectorAll('.status-badge.pending').forEach(badge => {
-                    badge.addEventListener('click', () => {
-                        leadsCol().doc(badge.dataset.id).update({
-                            done: true, sentAt: firebase.firestore.FieldValue.serverTimestamp()
+                tbody.querySelectorAll('.em-done-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const id = btn.dataset.id;
+                        const doc = await leadsCol().doc(id).get();
+                        const lead = doc.data();
+                        const linkedinDone = !!lead.linkedinSent || !lead.linkedin;
+                        await leadsCol().doc(id).update({
+                            emailSent: true,
+                            emailSentAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            ...(linkedinDone ? { done: true, sentAt: firebase.firestore.FieldValue.serverTimestamp() } : {})
                         });
-                        incrementDailyCount();
                     });
                 });
                 tbody.querySelectorAll('.li-done-btn').forEach(btn => {
@@ -912,12 +934,14 @@
 
         async function addLead() {
             const name = document.getElementById('leadName').value.trim();
+            const role = document.getElementById('leadRole').value.trim();
             const company = document.getElementById('leadCompany').value.trim();
+            const institutionalBacker = document.getElementById('leadBacker').value.trim();
             const email = document.getElementById('leadEmail').value.trim();
             const linkedin = document.getElementById('leadLinkedin').value.trim();
             if (!name) return;
             await leadsCol().add({
-                name, company, email, linkedin,
+                name, role, company, institutionalBacker, email, linkedin,
                 message: '', done: false,
                 channel: email ? 'email' : 'linkedin',
                 enrichmentSource: 'none',

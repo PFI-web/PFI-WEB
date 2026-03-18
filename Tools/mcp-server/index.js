@@ -207,6 +207,7 @@ server.tool(
             linkedin: z.string().optional().default(''),
             role: z.string().optional().default(''),
             email: z.string().optional().default(''),
+            institutionalBacker: z.string().optional().default('').describe('PE fund or institutional investor behind this company'),
             channel: z.enum(['email', 'linkedin']).optional().default('linkedin'),
             enrichmentSource: z.enum(['hunter', 'none']).optional().default('none')
         })).describe('Array of leads to save')
@@ -235,6 +236,7 @@ server.tool(
                 role: lead.role,
                 linkedin: lead.linkedin,
                 email: lead.email,
+                institutionalBacker: lead.institutionalBacker || '',
                 channel: lead.email ? 'email' : 'linkedin',
                 enrichmentSource: lead.enrichmentSource,
                 message: '',
@@ -368,12 +370,12 @@ server.tool(
 
 // ===== write_proof_sheet =====
 const TAB_HEADERS = {
-    'Active Pain': ['Company', "What They're Building", 'Where', "Why They're Hurting", 'Proof', 'Contact', 'LinkedIn', 'Thought Process'],
-    'Capital Pattern': ['Company', 'What They Keep Doing', 'Where', 'Why PFI Matters To Them', 'Proof', 'Contact', 'LinkedIn', 'Thought Process']
+    'Active Pain': ['Company', "What They're Building", 'Where', "Why They're Hurting", 'Proof', 'Contact', 'Institutional Backer', 'LinkedIn', 'Thought Process'],
+    'Capital Pattern': ['Company', 'What They Keep Doing', 'Where', 'Why PFI Matters To Them', 'Proof', 'Contact', 'Institutional Backer', 'LinkedIn', 'Thought Process']
 };
 const TAB_FIELDS = {
-    'Active Pain': ['company', 'what_they_are_building', 'where', 'why_they_are_hurting', 'proof', 'contact', 'linkedin', 'thought_process'],
-    'Capital Pattern': ['company', 'what_they_keep_doing', 'where', 'why_pfi_matters', 'proof', 'contact', 'linkedin', 'thought_process']
+    'Active Pain': ['company', 'what_they_are_building', 'where', 'why_they_are_hurting', 'proof', 'contact', 'institutional_backer', 'linkedin', 'thought_process'],
+    'Capital Pattern': ['company', 'what_they_keep_doing', 'where', 'why_pfi_matters', 'proof', 'contact', 'institutional_backer', 'linkedin', 'thought_process']
 };
 
 server.tool(
@@ -390,7 +392,8 @@ server.tool(
             what_they_keep_doing: z.string().optional().default('').describe('Capital Pattern: their pattern'),
             why_pfi_matters: z.string().optional().default('').describe('Capital Pattern: why the next project is coming'),
             proof: z.string().optional().default('').describe('Source URL'),
-            contact: z.string().optional().default('').describe('Best person to reach, name only'),
+            contact: z.string().optional().default('').describe('Best person to reach (fund-level contact preferred), name only'),
+            institutional_backer: z.string().optional().default('').describe('PE fund, infrastructure fund, or institutional investor behind the company. "backer not found" if unknown.'),
             linkedin: z.string().optional().default('').describe('Contact LinkedIn URL'),
             thought_process: z.string().optional().default('').describe('3-4 sentences: why this company and why this contact')
         })).describe('Array of rows to append')
@@ -426,7 +429,7 @@ server.tool(
                 // Check if header exists
                 const existing = await sheets.spreadsheets.values.get({
                     spreadsheetId,
-                    range: `'${tabName}'!A1:G1`
+                    range: `'${tabName}'!A1:I1`
                 }).catch(() => null);
 
                 const values = [];
