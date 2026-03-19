@@ -368,34 +368,67 @@ server.tool(
     }
 );
 
+// ===== read_proof_sheet =====
+server.tool(
+    'read_proof_sheet',
+    'Read all existing rows from the "Proof Sheet" tab in a Google Sheet. Returns an array of row objects with the 7 fields. Use this before writing to check what companies are already in the sheet.',
+    {
+        spreadsheetId: z.string().describe('Google Sheet ID (from the URL)')
+    },
+    async ({ spreadsheetId }) => {
+        try {
+            const sheets = getSheetsClient();
+
+            // Check if tab exists
+            const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties.title' });
+            const existingTabs = new Set(spreadsheet.data.sheets.map(s => s.properties.title));
+            if (!existingTabs.has(PROOF_TAB)) {
+                return textResult(JSON.stringify({ rows: [], message: 'No "Proof Sheet" tab found. Sheet is empty.' }));
+            }
+
+            // Read all data
+            const result = await sheets.spreadsheets.values.get({
+                spreadsheetId,
+                range: `'${PROOF_TAB}'!A:G`
+            }).catch(() => null);
+
+            if (!result || !result.data.values || result.data.values.length <= 1) {
+                return textResult(JSON.stringify({ rows: [], message: 'Proof Sheet tab exists but has no data rows.' }));
+            }
+
+            // Skip header row, map to objects
+            const dataRows = result.data.values.slice(1);
+            const rows = dataRows.map(row => {
+                const obj = {};
+                PROOF_FIELDS.forEach((field, i) => { obj[field] = row[i] || ''; });
+                return obj;
+            });
+
+            return textResult(JSON.stringify({ rows, count: rows.length }));
+        } catch (err) {
+            return textResult(`ERROR reading Google Sheet: ${err.message}`);
+        }
+    }
+);
+
 // ===== write_proof_sheet =====
-const TAB_HEADERS = {
-    'Active Pain': ['Company', "What They're Building", 'Where', "Why They're Hurting", 'Proof', 'Contact', 'Institutional Backer', 'LinkedIn', 'Thought Process'],
-    'Capital Pattern': ['Company', 'What They Keep Doing', 'Where', 'Why PFI Matters To Them', 'Proof', 'Contact', 'Institutional Backer', 'LinkedIn', 'Thought Process']
-};
-const TAB_FIELDS = {
-    'Active Pain': ['company', 'what_they_are_building', 'where', 'why_they_are_hurting', 'proof', 'contact', 'institutional_backer', 'linkedin', 'thought_process'],
-    'Capital Pattern': ['company', 'what_they_keep_doing', 'where', 'why_pfi_matters', 'proof', 'contact', 'institutional_backer', 'linkedin', 'thought_process']
-};
+const PROOF_HEADERS = ['Company', 'Institutional Backer', 'Classification', "What's Happening", 'Why Them', 'Key Contact', 'Source'];
+const PROOF_FIELDS = ['company', 'institutional_backer', 'classification', 'whats_happening', 'why_them', 'key_contact', 'source'];
+const PROOF_TAB = 'Proof Sheet';
 
 server.tool(
     'write_proof_sheet',
-    'Write proof-of-concept rows to a Google Sheet. Each row includes a tab field ("Active Pain" or "Capital Pattern") and is appended to the matching tab. Tabs and headers are created automatically.',
+    'Write proof-of-concept rows to a Google Sheet. All rows go to a single "Proof Sheet" tab. Tab and headers are created automatically.',
     {
         spreadsheetId: z.string().describe('Google Sheet ID (from the URL)'),
         rows: z.array(z.object({
-            tab: z.enum(['Active Pain', 'Capital Pattern']).optional().default('Active Pain').describe('Which tab to write to'),
-            company: z.string().describe('Company name'),
-            what_they_are_building: z.string().optional().default('').describe('Active Pain: the actual project'),
-            where: z.string().optional().default('').describe('TX / GA / AZ'),
-            why_they_are_hurting: z.string().optional().default('').describe('Active Pain: what is stuck and how long'),
-            what_they_keep_doing: z.string().optional().default('').describe('Capital Pattern: their pattern'),
-            why_pfi_matters: z.string().optional().default('').describe('Capital Pattern: why the next project is coming'),
-            proof: z.string().optional().default('').describe('Source URL'),
-            contact: z.string().optional().default('').describe('Best person to reach (fund-level contact preferred), name only'),
-            institutional_backer: z.string().optional().default('').describe('PE fund, infrastructure fund, or institutional investor behind the company. "backer not found" if unknown.'),
-            linkedin: z.string().optional().default('').describe('Contact LinkedIn URL'),
-            thought_process: z.string().optional().default('').describe('3-4 sentences: why this company and why this contact')
+            company: z.string().describe('Company name (the developer/operator)'),
+            institutional_backer: z.string().optional().default('').describe('PE fund, infrastructure fund, or investor behind the company. "backer not found" if unknown.'),
+            classification: z.enum(['Active Pain', 'Capital Pattern']).describe('Active Pain = currently stuck in permitting. Capital Pattern = repeat builder, next project coming.'),
+            whats_happening: z.string().optional().default('').describe('Situational intelligence: specific project name, capacity (MW), county/location, exact agency stage (e.g. "TCEQ air quality permit review"), regulatory signal or policy shift causing friction, and timeline evidence (filed date, expected approval, current status). Must read like an internal briefing, not a search summary.'),
+            why_them: z.string().optional().default('').describe('Personalization intelligence tied to the key contact: why does this specific person in this specific role care about this project friction? For Asset Managers: how the delay forces a pro forma revision, IRR recalculation, or reporting change. For IR Managers: how this creates an LP narrative gap or quarterly reporting problem. Must reference the contact by name and role.'),
+            key_contact: z.string().optional().default('').describe('Person-project-role connection. Format: "Name → Project Name → Role (Asset Manager / Investor Relations)". Multiple contacts separated by semicolon. "contact not found" if neither role found at the fund.'),
+            source: z.string().optional().default('').describe('Verifiable source URL(s). Multiple sources separated by " | " (e.g. "https://source1.com | https://source2.com"). More sources = stronger evidence.')
         })).describe('Array of rows to append')
     },
     async ({ spreadsheetId, rows }) => {
@@ -406,55 +439,38 @@ server.tool(
             const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties.title' });
             const existingTabs = new Set(spreadsheet.data.sheets.map(s => s.properties.title));
 
-            // Group rows by tab
-            const grouped = {};
-            for (const row of rows) {
-                const tab = row.tab || 'Active Pain';
-                if (!grouped[tab]) grouped[tab] = [];
-                grouped[tab].push(row);
-            }
-
-            let totalWritten = 0;
-
-            for (const [tabName, tabRows] of Object.entries(grouped)) {
-                // Create tab if it doesn't exist
-                if (!existingTabs.has(tabName)) {
-                    await sheets.spreadsheets.batchUpdate({
-                        spreadsheetId,
-                        requestBody: { requests: [{ addSheet: { properties: { title: tabName } } }] }
-                    });
-                    existingTabs.add(tabName);
-                }
-
-                // Check if header exists
-                const existing = await sheets.spreadsheets.values.get({
+            // Create tab if it doesn't exist
+            if (!existingTabs.has(PROOF_TAB)) {
+                await sheets.spreadsheets.batchUpdate({
                     spreadsheetId,
-                    range: `'${tabName}'!A1:I1`
-                }).catch(() => null);
-
-                const values = [];
-                const headers = TAB_HEADERS[tabName] || TAB_HEADERS['Active Pain'];
-                if (!existing || !existing.data.values || existing.data.values.length === 0) {
-                    values.push(headers);
-                }
-
-                const fields = TAB_FIELDS[tabName] || TAB_FIELDS['Active Pain'];
-                for (const row of tabRows) {
-                    values.push(fields.map(f => row[f] || ''));
-                }
-
-                await sheets.spreadsheets.values.append({
-                    spreadsheetId,
-                    range: `'${tabName}'!A1`,
-                    valueInputOption: 'USER_ENTERED',
-                    insertDataOption: 'INSERT_ROWS',
-                    requestBody: { values }
+                    requestBody: { requests: [{ addSheet: { properties: { title: PROOF_TAB } } }] }
                 });
-
-                totalWritten += tabRows.length;
             }
 
-            return textResult(`Wrote ${totalWritten} rows across ${Object.keys(grouped).length} tab(s).`);
+            // Check if header exists
+            const existing = await sheets.spreadsheets.values.get({
+                spreadsheetId,
+                range: `'${PROOF_TAB}'!A1:G1`
+            }).catch(() => null);
+
+            const values = [];
+            if (!existing || !existing.data.values || existing.data.values.length === 0) {
+                values.push(PROOF_HEADERS);
+            }
+
+            for (const row of rows) {
+                values.push(PROOF_FIELDS.map(f => row[f] || ''));
+            }
+
+            await sheets.spreadsheets.values.append({
+                spreadsheetId,
+                range: `'${PROOF_TAB}'!A1`,
+                valueInputOption: 'USER_ENTERED',
+                insertDataOption: 'INSERT_ROWS',
+                requestBody: { values }
+            });
+
+            return textResult(`Wrote ${rows.length} rows to "${PROOF_TAB}" tab.`);
         } catch (err) {
             return textResult(`ERROR writing to Google Sheet: ${err.message}`);
         }
