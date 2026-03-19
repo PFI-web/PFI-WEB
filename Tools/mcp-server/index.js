@@ -426,7 +426,7 @@ server.tool(
             institutional_backer: z.string().optional().default('').describe('PE fund, infrastructure fund, or investor behind the company. "backer not found" if unknown.'),
             classification: z.enum(['Active Pain', 'Capital Pattern']).describe('Active Pain = currently stuck in permitting. Capital Pattern = repeat builder, next project coming.'),
             whats_happening: z.string().optional().default('').describe('Situational intelligence: specific project name, capacity (MW), county/location, exact agency stage (e.g. "TCEQ air quality permit review"), regulatory signal or policy shift causing friction, and timeline evidence (filed date, expected approval, current status). Must read like an internal briefing, not a search summary.'),
-            why_them: z.string().optional().default('').describe('Personalization intelligence tied to the key contact: why does this specific person in this specific role care about this project friction? For Asset Managers: how the delay forces a pro forma revision, IRR recalculation, or reporting change. For IR Managers: how this creates an LP narrative gap or quarterly reporting problem. Must reference the contact by name and role.'),
+            why_them: z.string().optional().default('').describe('Personalization intelligence — ties company/backer → project friction → permitting risk exposure → what\'s actionable. Must connect the specific permit delay to the financial risk the backer is carrying (IRR erosion, idle capital, LP reporting gaps) and land on why quantifying permitting risk now is the actionable step. Should read like a reason to take a meeting, not a summary of the delay.'),
             key_contact: z.string().optional().default('').describe('Person-project-role connection. Format: "Name → Project Name → Role (Asset Manager / Investor Relations)". Multiple contacts separated by semicolon. "contact not found" if neither role found at the fund.'),
             source: z.string().optional().default('').describe('Verifiable source URL(s). Multiple sources separated by " | " (e.g. "https://source1.com | https://source2.com"). More sources = stronger evidence.')
         })).describe('Array of rows to append')
@@ -473,6 +473,81 @@ server.tool(
             return textResult(`Wrote ${rows.length} rows to "${PROOF_TAB}" tab.`);
         } catch (err) {
             return textResult(`ERROR writing to Google Sheet: ${err.message}`);
+        }
+    }
+);
+
+// ===== update_proof_sheet =====
+server.tool(
+    'update_proof_sheet',
+    'Update existing rows in the "Proof Sheet" tab by matching on company name. Overwrites only the fields you provide — unspecified fields are left unchanged.',
+    {
+        spreadsheetId: z.string().describe('Google Sheet ID (from the URL)'),
+        updates: z.array(z.object({
+            company: z.string().describe('Company name to match (must match an existing row exactly)'),
+            institutional_backer: z.string().optional().describe('New value for Institutional Backer column'),
+            classification: z.string().optional().describe('New value for Classification column'),
+            whats_happening: z.string().optional().describe('New value for What\'s Happening column'),
+            why_them: z.string().optional().describe('New value for Why Them column'),
+            key_contact: z.string().optional().describe('New value for Key Contact column'),
+            source: z.string().optional().describe('New value for Source column')
+        })).describe('Array of updates, each keyed by company name')
+    },
+    async ({ spreadsheetId, updates }) => {
+        try {
+            const sheets = getSheetsClient();
+
+            // Read all data
+            const result = await sheets.spreadsheets.values.get({
+                spreadsheetId,
+                range: `'${PROOF_TAB}'!A:G`
+            });
+
+            if (!result || !result.data.values || result.data.values.length <= 1) {
+                return textResult('ERROR: No data rows found in Proof Sheet.');
+            }
+
+            const allRows = result.data.values; // includes header at index 0
+            let updatedCount = 0;
+            const notFound = [];
+
+            for (const update of updates) {
+                // Find the row index (1-based in sheet) where column A matches company
+                const rowIndex = allRows.findIndex((row, i) => i > 0 && row[0] && row[0].trim().toLowerCase() === update.company.trim().toLowerCase());
+
+                if (rowIndex === -1) {
+                    notFound.push(update.company);
+                    continue;
+                }
+
+                // Build the updated row, keeping existing values for unspecified fields
+                const existingRow = allRows[rowIndex];
+                const newRow = PROOF_FIELDS.map((field, colIdx) => {
+                    if (field === 'company') return existingRow[colIdx] || ''; // don't change company name
+                    return update[field] !== undefined ? update[field] : (existingRow[colIdx] || '');
+                });
+
+                // Write just this row back (rowIndex is 0-based, sheet rows are 1-based)
+                const sheetRow = rowIndex + 1;
+                await sheets.spreadsheets.values.update({
+                    spreadsheetId,
+                    range: `'${PROOF_TAB}'!A${sheetRow}:G${sheetRow}`,
+                    valueInputOption: 'USER_ENTERED',
+                    requestBody: { values: [newRow] }
+                });
+
+                // Update local copy so subsequent matches see updated data
+                allRows[rowIndex] = newRow;
+                updatedCount++;
+            }
+
+            let msg = `Updated ${updatedCount} row(s).`;
+            if (notFound.length > 0) {
+                msg += ` Not found: ${notFound.join(', ')}`;
+            }
+            return textResult(msg);
+        } catch (err) {
+            return textResult(`ERROR updating Google Sheet: ${err.message}`);
         }
     }
 );

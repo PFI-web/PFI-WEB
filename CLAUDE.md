@@ -70,10 +70,15 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 
 **Pressure chain:** Project in permitting pain → Developer/operator → Who funded them → Fund-level contact
 
-1. **Find Leads** → Agent searches for signal strength first: FERC queues, permits.performance.gov delayed milestones, state permit databases (TCEQ/GA EPD/AZ DEQ), ISO interconnection queues (ERCOT/MISO/SPP/Georgia Power/APS/SRP), capital commitments — focused on TX, GA, AZ
+1. **Find Leads** → Agent searches for signal strength first across energy and non-energy sources, focused on TX, GA, AZ:
+   - **Energy:** FERC queues, permits.performance.gov delayed milestones, state permit databases (TCEQ/GA EPD/AZ DEQ), ISO interconnection queues (ERCOT/MISO/SPP/Georgia Power/APS/SRP), capital commitments
+   - **Data Centers:** State utility commission large load interconnection requests, county zoning/special use permits, state water authority permits, Army Corps Section 404 permits, FAA obstruction evaluation filings
+   - **Manufacturing:** EPA Title V air permit applications, state NPDES industrial wastewater discharge permits, state economic development project announcements
+   - **Transmission:** State PUC/PSC certificate of convenience and necessity dockets, NEPA environmental review tracker, BLM right-of-way applications
+   - If a project appears in a non-energy source but not in an energy queue, still classify using Active Pain / Capital Pattern logic. Do not expand geography beyond TX, GA, AZ until instructed.
 2. Each company classified as **Active Pain** (stuck in permitting now) or **Capital Pattern** (repeat builder, next project coming)
 3. **Institutional backer lookup** — After confirming permitting pain, agent searches for the PE fund / infrastructure investor behind the company (e.g. "[Company] equity partner", "[Company] backed by", "[Company] investors"). Looking for names like Stonepeak, Brookfield, KKR, Apollo, etc. If not found after 3 searches → "backer not found" (row still saved)
-4. Agent finds up to TWO fund-level contacts per firm — **Asset Manager** (priority 1: recalculates the pro forma when permits slip, provides raw data to IR) and **Investor Relations Manager** (priority 2: faces the LPs, explains underperformance, maintains the firm's narrative). Both saved as separate leads when found. If neither role is found at the fund, skip the company and move on
+4. Agent finds up to TWO fund-level contacts per firm using the project record as search context — searches combine fund name + project name + agency + state (not generic role searches). **Asset Manager** (priority 1: recalculates the pro forma when permits slip, provides raw data to IR) and **Investor Relations Manager** (priority 2: faces the LPs, explains underperformance, maintains the firm's narrative). Both saved as separate leads when found. If neither role is found at the fund, skip the company and move on
 5. For each person: **always** get LinkedIn profile via Playwright, **then** try Hunter for email
 6. Email found → `channel: 'email'`, lead has both email + LinkedIn | No email → `channel: 'linkedin'`, LinkedIn only
 7. **Outreach**: Agent sends emails via Gmail SMTP only. LinkedIn connection requests are **manual** — user sends them and clicks the LinkedIn icon in the dashboard to mark complete.
@@ -84,8 +89,8 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - Task type: `proofSheet` with `{ status, count, spreadsheetId, createdAt }`
 - **Single "Proof Sheet" tab** with 7 columns: Company, Institutional Backer, Classification, What's Happening, Why Them, Key Contact, Source
 - **Situational intelligence** ("What's Happening"): project name, capacity/MW, county/location, exact agency stage, regulatory signal causing friction, timeline evidence. Must read like an internal briefing.
-- **Personalization intelligence** ("Why Them"): person-specific — why does the key contact (by name and role) care about this project's friction. For Asset Managers: pro forma/IRR impact. For IR Managers: LP narrative/reporting impact.
-- **Key Contact column**: `"Name → Project Name → Role (Asset Manager / Investor Relations)"`. Found via web search only — no Playwright, no LinkedIn, no Hunter. Multiple contacts separated by semicolon. `"contact not found"` if neither role found.
+- **Personalization intelligence** ("Why Them"): Ties it all together — company/backer → project friction → permitting risk exposure → what's actionable. Not "this project is delayed" but "here's the permitting risk this fund is carrying on this project and why they need to quantify it now." Connect the specific permit delay to the financial exposure the backer faces — IRR erosion, capital sitting idle, LP reporting gaps, pro forma revisions. Every "Why Them" should read like a reason the fund needs to take a meeting about permitting risk, not a summary of what's happening.
+- **Key Contact column**: `"Name | Role (Title) | Firm | Project"`. Found via web search only — no Playwright, no LinkedIn, no Hunter. Multiple contacts separated by semicolon. Example: `"Jane Doe | Asset Manager (VP Asset Management) | Stonepeak | Brazoria Solar Farm"`. `"contact not found"` if neither role found.
 - **Verification rule**: Every person-to-project connection must be verified by a real source. Finding a person at a fund does NOT mean they are connected to a specific project. Agent must run verification searches (`"[Person] [Project/Company]"`, `"[Person] [Fund] [state] infrastructure"`) and only include verified connections. Unverified = `"contact not found"`. A wrong connection is worse than no connection.
 - Agent runs follow-up searches per company to extract project-level specifics (not just surface signals)
 - Tab and headers are created automatically by the MCP tool
@@ -130,7 +135,7 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - `poll_tasks(userId)` — Check for pending tasks
 - `complete_task(userId, taskName)` — Mark task as complete
 - `read_proof_sheet(spreadsheetId)` — Read all existing rows from the "Proof Sheet" tab. Returns array of row objects (7 fields). Used before writing to check what companies are already in the sheet and avoid duplicates.
-- `write_proof_sheet(spreadsheetId, rows[])` — Append rows to a single "Proof Sheet" tab. Each row has 7 fields: company, institutional_backer, classification (Active Pain/Capital Pattern), whats_happening (situational intelligence: project name, capacity, location, agency stage, regulatory signal, timeline), why_them (personalization intelligence: person-specific, tied to key contact's role and this project's friction), key_contact (format: "Name → Project → Role"; web search only, no LinkedIn/Hunter), source. Auto-creates tab and headers. Uses `USER_ENTERED` mode.
+- `write_proof_sheet(spreadsheetId, rows[])` — Append rows to a single "Proof Sheet" tab. Each row has 7 fields: company, institutional_backer, classification (Active Pain/Capital Pattern), whats_happening (situational intelligence: project name, capacity, location, agency stage, regulatory signal, timeline), why_them (personalization intelligence: person-specific, tied to key contact's role and this project's friction), key_contact (format: "Name | Role (Title) | Firm | Project"; web search only, no LinkedIn/Hunter), source. Auto-creates tab and headers. Uses `USER_ENTERED` mode.
 
 ### Environment Variables (MCP Server)
 - `TAVILY_API_KEY` — Tavily web search

@@ -23,7 +23,10 @@ Poll for tasks using `poll_tasks` every 10 seconds. If no tasks are pending, wai
 
 ### findLeads
 1. Read the task criteria (count). The `count` is the **exact number of companies** to return — no more, no less.
-2. **Search for signal strength first** — Use `search_web` to hunt for the strongest signals across these sources, focused on **TX, GA, AZ**:
+2. **Search for signal strength first** — Use `search_web` to hunt for the strongest signals across these sources, focused on **TX, GA, AZ**. Search by state first. Do not expand geography until instructed.
+
+   #### Energy Sources
+
    - **FERC interconnection queues** — filings in TX, GA, AZ
      Example queries:
      - `"FERC interconnection queue Texas 2025 2026 solar wind storage"`
@@ -61,6 +64,80 @@ Poll for tasks using `poll_tasks` every 10 seconds. If no tasks are pending, wai
      - `"data center development announced Texas Georgia Arizona permitting"`
      - `"private equity infrastructure fund close renewable energy"`
 
+   #### Data Center Sources
+
+   - **State utility commission large load interconnection requests**
+     Example queries:
+     - `"PUCT large load interconnection request data center Texas 2025 2026"`
+     - `"Georgia PSC large load service request data center"`
+     - `"Arizona Corporation Commission large load data center interconnection"`
+
+   - **County zoning and special use permit databases**
+     Example queries:
+     - `"data center zoning permit application Texas county 2025 2026"`
+     - `"special use permit data center Georgia county planning commission"`
+     - `"data center conditional use permit Arizona county zoning board"`
+
+   - **State water authority permit filings**
+     Example queries:
+     - `"TCEQ water use permit data center cooling Texas"`
+     - `"Georgia EPD water withdrawal permit data center"`
+     - `"Arizona Department of Water Resources permit data center groundwater"`
+
+   - **Army Corps of Engineers Section 404 permits**
+     Example queries:
+     - `"Army Corps Section 404 permit data center Texas wetlands"`
+     - `"USACE Section 404 permit Georgia data center construction"`
+     - `"Army Corps 404 permit Arizona data center site development"`
+
+   - **FAA obstruction evaluation filings**
+     Example queries:
+     - `"FAA obstruction evaluation filing data center Texas"`
+     - `"FAA Form 7460 data center Georgia tower crane"`
+     - `"FAA obstruction evaluation Arizona data center construction"`
+
+   #### Manufacturing Sources
+
+   - **EPA Title V air permit applications**
+     Example queries:
+     - `"EPA Title V air permit application manufacturing Texas 2025 2026"`
+     - `"Title V operating permit new manufacturing facility Georgia"`
+     - `"EPA Title V permit application industrial plant Arizona"`
+
+   - **State NPDES industrial wastewater discharge permits**
+     Example queries:
+     - `"TCEQ TPDES industrial wastewater permit manufacturing Texas"`
+     - `"Georgia EPD NPDES industrial discharge permit new facility"`
+     - `"Arizona ADEQ NPDES wastewater discharge permit manufacturing"`
+
+   - **State economic development project announcements**
+     Example queries:
+     - `"Texas economic development manufacturing project announced 2025 2026"`
+     - `"Georgia economic development new manufacturing facility announcement"`
+     - `"Arizona Commerce Authority manufacturing project investment"`
+
+   #### Transmission Sources
+
+   - **State PUC/PSC certificate of convenience and necessity dockets**
+     Example queries:
+     - `"PUCT certificate convenience necessity transmission line Texas docket"`
+     - `"Georgia PSC certificate convenience necessity transmission"`
+     - `"Arizona Corporation Commission certificate convenience necessity transmission line"`
+
+   - **NEPA environmental review tracker**
+     Example queries:
+     - `"NEPA environmental impact statement transmission line Texas 2025 2026"`
+     - `"NEPA environmental review transmission project Georgia"`
+     - `"NEPA EIS transmission line Arizona pending review"`
+
+   - **BLM right-of-way applications**
+     Example queries:
+     - `"BLM right-of-way application transmission line Texas"`
+     - `"Bureau of Land Management ROW transmission Georgia"`
+     - `"BLM right-of-way grant transmission corridor Arizona"`
+
+   **Non-energy source rule:** If a project appears in a Data Center, Manufacturing, or Transmission source but NOT in an energy queue, still classify it using the same **Active Pain** / **Capital Pattern** logic. Log the source it was found in.
+
    Only run enough searches to fill the count. If count is 1, run ONE search and pick the single best company. Mix and match queries across source types — do not run all queries from one source before moving to the next.
 
    **Source credibility rule:** Every company you pick MUST come from a **real, verifiable source** with an actual URL — a government filing, a news article from a known publication, a regulatory database entry, or an official project announcement. Do NOT use unverified, speculative, AI-generated, or questionable sources. No source URL = no save. When in doubt, government databases and major industry publications are always preferred.
@@ -79,7 +156,7 @@ Poll for tasks using `poll_tasks` every 10 seconds. If no tasks are pending, wai
 
    You're looking for names like Stonepeak, Brookfield, KKR, Apollo, Blackstone Infrastructure, Arclight, Energy Capital Partners — that category of institution. If you cannot find a backer after three searches, set the institutional backer to `"backer not found"` and move on. Do NOT skip the row — the project signal is still valuable.
 
-5. **Find fund-level contacts** — The outreach goes to the fund, not the developer. For the institutional backer identified in step 4, find up to TWO people at the fund — ideally both roles below. These are the people who feel permit friction pain the most:
+5. **Find fund-level contacts using the project record** — The outreach goes to the fund, not the developer. You already have the project name, fund name, filing dates, agency, and state from earlier steps. **Use that context as your search inputs** — don't search generically for roles at a fund. The project record IS the query.
 
    **Priority 1: Asset Manager** (must find)
    - Titles: Asset Manager, VP Asset Management, Director of Asset Management, Senior Asset Manager, Portfolio Asset Manager
@@ -89,9 +166,15 @@ Poll for tasks using `poll_tasks` every 10 seconds. If no tasks are pending, wai
    - Titles: Investor Relations Manager, VP Investor Relations, Director of Investor Relations, Head of IR, IR Associate
    - Why them: They are the "face" to the fund's capital providers (LPs). When projects underperform due to permit delays, they field the incoming messages from angry LPs, prepare quarterly reports explaining the shortfall, and maintain the firm's narrative. PFI gives them data to quantify and communicate permitting risk before it becomes a surprise.
 
-   **Search strategy:** Always search for the Asset Manager first. Then search for the IR Manager at the same fund. If you find both, save both as separate leads (same company, same institutional backer, different contacts). If you can only find one, that's still a valid lead. If neither is found at the fund, skip this company entirely and move on to the next one. Do NOT fall back to developer/operator contacts.
+   **Search strategy — project-context searches:**
+   Use the project details you already found as search inputs. Examples:
+   - `"[Fund name] [Project name] asset manager"` — direct project connection
+   - `"[Fund name] [state] infrastructure portfolio asset management"` — regional portfolio
+   - `"[Project name] [agency e.g. FERC/ERCOT] filing contact"` — regulatory filing contacts
+   - `"[Fund name] [Developer name] investor relations"` — fund-developer connection
+   - `"[Fund name] [Project name] investor relations"` — direct project IR
 
-   For each target, use `search_web` to find people in these specific roles.
+   Always search for the Asset Manager first. Then search for the IR Manager at the same fund. If you find both, save both as separate leads (same company, same institutional backer, different contacts). If you can only find one, that's still a valid lead. If neither is found at the fund, skip this company entirely and move on to the next one. Do NOT fall back to developer/operator contacts. Do NOT search generically (e.g. "[Fund name] asset manager") — always include project or regional context.
 
 6. **Enrich contacts** — For each person found, always collect both LinkedIn and email:
    a. **LinkedIn (Playwright only)** — Use Playwright to open linkedin.com/search and search for the person by name + company (use the fund name, not the developer). Grab their profile URL from the results. **Never use `search_web`/Tavily to find LinkedIn profiles** — Tavily does not reliably return LinkedIn URLs.
@@ -126,7 +209,7 @@ This task is a **structured intelligence version** of findLeads. It runs the sam
 
 1. Read the task data (count, spreadsheetId). The `count` is the **exact number of NEW companies** to add — no more, no less.
 2. **Check what's already in the sheet** — Call `read_proof_sheet` with the spreadsheetId. Note all company names already present. When searching for new companies in the next steps, **skip any company that is already in the sheet**. This prevents duplicates when re-running the task or updating the system. The count refers to new rows only — existing rows don't count toward it.
-3. **Search for signal strength first** — Same logic as findLeads. Use `search_web` to hunt for the strongest signals across FERC queues, permits.performance.gov, permitting.gov press releases, state permit databases (TCEQ/GA EPD/AZ DEQ), ISO interconnection queues (ERCOT/MISO/SPP/Georgia Power/APS/SRP), and capital commitments — focused on TX, GA, AZ. Only run enough searches to fill the count. **Same source credibility rule as findLeads** — no source URL, no save. **Skip any company already in the sheet** (from step 2).
+3. **Search for signal strength first** — Same logic as findLeads. Use `search_web` to hunt for the strongest signals across all source categories (Energy, Data Centers, Manufacturing, Transmission) — focused on TX, GA, AZ. Search by state first. See findLeads step 2 for the full list of sources and example queries. Only run enough searches to fill the count. **Same source credibility rule as findLeads** — no source URL, no save. **Skip any company already in the sheet** (from step 2). If a project appears in a non-energy source but not in an energy queue, still classify using Active Pain / Capital Pattern logic.
 4. **Classify each result** — Decide: **Active Pain** (project currently stuck in permitting) or **Capital Pattern** (repeat builder, next project coming).
 5. **Find the institutional backer** — Same logic as findLeads step 4. After confirming permitting pain, run searches to find the PE fund or infrastructure investor behind the company. If not found after three searches, set to `"backer not found"` and continue.
 6. **Dig into the project (Situational Intelligence)** — This is the critical depth step. For each company, run **follow-up searches** to extract project-level specifics. Do NOT rely on the initial discovery search alone. Run queries like:
@@ -146,46 +229,48 @@ This task is a **structured intelligence version** of findLeads. It runs the sam
 
    If the initial search already provided most of these details, one follow-up search may be enough. If not, run up to three follow-up searches per company. The goal is specificity — not "they have permit issues" but "their 300MW Brazoria County solar project has been in ERCOT's Definitive Planning Phase since March 2025 with no timeline to proceed, coinciding with PUCT's new reliability standard changes."
 
-7. **Find and VERIFY fund-level contacts (web search only)** — After finding the backer, search for the **names** of the Asset Manager and IR Manager at the fund. Use `search_web` only — **no Playwright, no LinkedIn, no Hunter**. This is intelligence gathering, not outreach enrichment.
-
-   **Search strategy:**
-   - `"[Institutional backer] asset manager infrastructure energy"` — to find the Asset Manager
-   - `"[Institutional backer] VP asset management"` — alternative title search
-   - `"[Institutional backer] investor relations manager"` — to find the IR Manager
-   - `"[Institutional backer] head of investor relations energy"` — alternative title search
+7. **Find and VERIFY fund-level contacts using the project record (web search only)** — You already have the project name, fund name, agency, state, and filing details. **Use that context as your search inputs** — don't search generically for roles at a fund. Use `search_web` only — **no Playwright, no LinkedIn, no Hunter**. This is intelligence gathering, not outreach enrichment.
 
    **Who you're looking for:**
    - **Asset Manager** — Titles: Asset Manager, VP Asset Management, Director of Asset Management, Senior Asset Manager. They recalculate the pro forma when permits slip. They provide the raw data to IR.
    - **IR Manager** — Titles: Investor Relations Manager, VP Investor Relations, Director of Investor Relations, Head of IR. They face the LPs and explain underperformance.
 
+   **Search strategy — project-context searches:**
+   The project record already contains the information needed to find the people. Use it:
+   - `"[Fund name] [Project name] asset manager"` — direct project connection
+   - `"[Fund name] [state] infrastructure portfolio asset management"` — regional portfolio
+   - `"[Project name] [agency e.g. FERC/ERCOT] filing contact"` — regulatory filing contacts
+   - `"[Fund name] [Developer name] investor relations"` — fund-developer connection
+   - `"[Fund name] [Project name] investor relations"` — direct project IR
+
+   Do NOT search generically (e.g. `"[Fund name] asset manager"`) — always include project, developer, or regional context. A contact found through a project-context search is already more likely to be connected to the project.
+
    **⚠️ VERIFICATION RULE — NO ASSUMPTIONS:**
-   Every person-to-project connection must be **verified by a real source**, not assumed. Finding "Jane Doe is an Asset Manager at Brookfield" and "Brookfield backs Company X" does NOT mean Jane Doe is connected to Company X's project. You must verify the link:
+   Even with project-context searches, every person-to-project connection must be **verified by a real source**, not assumed. The search returning a name near a project name is not proof of a connection.
 
    - **Verified connection** = a source explicitly names the person in relation to the project, the fund's specific infrastructure portfolio that includes this project, or the geographic region/sector this project falls under. Examples: a press release quoting them about the project, a filing listing them as a responsible party, an article naming them as overseeing the fund's energy portfolio in that state.
    - **Unverified assumption** = you found the person's name and title at the fund, but no source connects them to this specific project or portfolio. This is NOT enough.
 
-   **Search to verify the connection:**
-   After finding a candidate name, run a verification search:
+   **If the project-context search didn't surface a verified connection**, run one follow-up:
    - `"[Person name] [Project name or Company name]"` — direct connection
-   - `"[Person name] [Institutional backer] [state e.g. Texas] infrastructure"` — portfolio/region connection
-   - `"[Person name] [Institutional backer] energy renewables portfolio"` — sector connection
+   - `"[Person name] [Fund name] [state] infrastructure"` — portfolio/region connection
 
-   **If verified:** Include them in the Key Contact column with the verified connection.
-   **If NOT verified after two verification searches:** Do NOT include this person. Set to `"contact not found"` rather than guessing. A wrong connection is worse than no connection.
+   **If verified:** Include them in the Key Contact column.
+   **If NOT verified:** Set to `"contact not found"` rather than guessing. A wrong connection is worse than no connection.
 
-   If you find and verify both, format as: `"Jane Doe → Brazoria Solar Farm → Asset Manager; John Smith → Brazoria Solar Farm → Investor Relations"`
+   If you find and verify both, format as: `"Jane Doe | Asset Manager (VP Asset Management) | Stonepeak | Brazoria Solar Farm; John Smith | Investor Relations (Director of IR) | Stonepeak | Brazoria Solar Farm"`
    If you find and verify only one, that's still valid.
    If neither is found or verified after searches, set to `"contact not found"` and continue. Do NOT skip the row — the project signal is still valuable.
 
-8. **Write "Why Them" (Personalization Intelligence)** — This column must be **person-specific**, tied to the **verified** key contact found in step 7. It explains why this specific person in this specific role cares about this specific project's friction. **Only include claims you can back with a source. No assumptions, no fabricated reasoning.**
+8. **Write "Why Them" (Personalization Intelligence)** — This column ties it all together: company/backer → project friction → permitting risk exposure → what's actionable. The goal is to make the row read like a reason the fund needs to take a meeting about permitting risk. **Only include claims you can back with a source. No assumptions, no fabricated reasoning.**
 
-   **For an Asset Manager:** Connect their **verified** role to the project's delay. Only state what you know from sources — their actual portfolio responsibility, the specific project's delay, and the financial implication. Example: "Jane Doe oversees Stonepeak's Texas renewable portfolio which includes Brazoria Solar (verified via [source]). The 6-month ERCOT queue delay puts the 2027 COD at risk, forcing a pro forma revision on the IRR model she reports to the investment committee."
+   **Structure:** Start with the backer's exposure to this specific project. Name the permit delay and what it does to the fund financially — IRR erosion from timeline slip, capital sitting idle while permits stall, pro forma revisions that change the investment thesis, LP reporting gaps when projects underperform. Then land on why quantifying this permitting risk now (via PFI) is the actionable step.
 
-   **For an IR Manager:** Connect their **verified** role to the LP communication burden. Example: "John Smith leads IR for Stonepeak's Infrastructure Fund IV (verified via [source]). This project's permit slip creates a narrative gap in Q1 2026 LP reports — capital sitting idle while permits stall is exactly the kind of underperformance LPs will question."
+   **Example (backer found):** "Stonepeak backs [Developer]'s 300MW Brazoria Solar project through Infrastructure Fund IV. The 6-month ERCOT queue delay puts the 2027 COD at risk — that's capital deployed with no return timeline, forcing a pro forma revision that drops projected IRR below the fund's 12% threshold. PFI gives the fund a way to model this permitting risk before it becomes an LP surprise."
 
-   **What NOT to do:** Do not invent portfolio responsibilities, fabricate reporting relationships, or assume a person cares about a project just because they work at the fund. If you cannot verify the connection, do not write a person-specific "Why Them."
+   **Example (backer not found):** "[Developer]'s Brazoria Solar project has $400M committed with a 6-month ERCOT queue delay and no COD visibility. Whoever backstops this project is carrying unquantified permitting risk — capital idle, IRR eroding, and no tool to model when (or if) the permit clears. PFI quantifies that exposure before it hits the financial model."
 
-   If the key contact is `"contact not found"`, write the "Why Them" generically about the fund: why does this fund care about this project's permitting friction, given their portfolio and investment thesis. This is the only case where generic reasoning is acceptable.
+   **What NOT to do:** Do not just describe the delay or restate "What's Happening." Do not invent financial figures you can't source. The "Why Them" must go beyond the situation to the **risk the backer is carrying** and why they need to act on it.
 
 9. **Write to Google Sheet as results come in** — Do NOT wait until everything is found. Call `write_proof_sheet` as soon as you have a complete row. All rows go to a single "Proof Sheet" tab.
 
@@ -194,8 +279,8 @@ This task is a **structured intelligence version** of findLeads. It runs the sam
    - `institutional_backer`: The PE fund, infrastructure fund, or investor behind this company. `"backer not found"` if unknown.
    - `classification`: `"Active Pain"` or `"Capital Pattern"`
    - `whats_happening`: Situational intelligence — project name, capacity, location, exact agency stage, regulatory signal, timeline evidence. Must read like an internal briefing.
-   - `why_them`: Personalization intelligence — why does the key contact (by name and role) care about this specific project's friction. Must reference the person and connect their role to the delay's impact.
-   - `key_contact`: `"Name → Project Name → Role (Asset Manager / Investor Relations)"`. Multiple contacts separated by semicolon. `"contact not found"` if neither role found.
+   - `why_them`: Personalization intelligence — ties company/backer → project friction → permitting risk exposure → what's actionable. Must connect the specific permit delay to the financial risk the backer is carrying (IRR erosion, idle capital, LP reporting gaps) and land on why quantifying permitting risk now is the actionable step. Should read like a reason to take a meeting, not a summary of the delay.
+   - `key_contact`: Format: `"Name | Role (Title) | Firm | Project"`. Multiple contacts separated by semicolon. Example: `"Jane Doe | Asset Manager (VP Asset Management) | Stonepeak | Brazoria Solar Farm"`. `"contact not found"` if neither role found.
    - `source`: Verifiable source URL(s). Can include multiple sources separated by ` | ` (e.g. `"https://source1.com | https://source2.com"`). More sources = stronger evidence. Include every source that contributed to the row — the initial signal discovery, follow-up project details, backer confirmation, and contact verification.
 
 10. You can call `write_proof_sheet` multiple times so results appear incrementally in the sheet.
