@@ -371,7 +371,7 @@ server.tool(
 // ===== read_proof_sheet =====
 server.tool(
     'read_proof_sheet',
-    'Read all existing rows from the "Proof Sheet" tab in a Google Sheet. Returns an array of row objects with the 7 fields. Use this before writing to check what companies are already in the sheet.',
+    'Read all existing rows from the "Proof Sheet" tab in a Google Sheet. Returns an array of row objects with 11 fields. Use this before writing to check what projects are already in the sheet.',
     {
         spreadsheetId: z.string().describe('Google Sheet ID (from the URL)')
     },
@@ -389,7 +389,7 @@ server.tool(
             // Read all data
             const result = await sheets.spreadsheets.values.get({
                 spreadsheetId,
-                range: `'${PROOF_TAB}'!A:G`
+                range: `'${PROOF_TAB}'!A:K`
             }).catch(() => null);
 
             if (!result || !result.data.values || result.data.values.length <= 1) {
@@ -412,23 +412,27 @@ server.tool(
 );
 
 // ===== write_proof_sheet =====
-const PROOF_HEADERS = ['Company', 'Institutional Backer', 'Classification', "What's Happening", 'Why Them', 'Key Contact', 'Source'];
-const PROOF_FIELDS = ['company', 'institutional_backer', 'classification', 'whats_happening', 'why_them', 'key_contact', 'source'];
+const PROOF_HEADERS = ['Company', 'Institutional Backer', 'Fund Experience', 'Classification', "What's Happening", 'Why Them', 'Key Contact', 'Contact LinkedIn', 'Contact Rationale', 'Contact Confidence', 'Source'];
+const PROOF_FIELDS = ['company', 'institutional_backer', 'fund_experience', 'classification', 'whats_happening', 'why_them', 'key_contact', 'contact_linkedin', 'contact_rationale', 'contact_confidence', 'source'];
 const PROOF_TAB = 'Proof Sheet';
 
 server.tool(
     'write_proof_sheet',
-    'Write proof-of-concept rows to a Google Sheet. All rows go to a single "Proof Sheet" tab. Tab and headers are created automatically.',
+    'Write proof-of-concept rows to a Google Sheet. All rows go to a single "Proof Sheet" tab. Tab and headers are created automatically. One row per project (not per fund).',
     {
         spreadsheetId: z.string().describe('Google Sheet ID (from the URL)'),
         rows: z.array(z.object({
-            company: z.string().describe('Company name (the developer/operator)'),
+            company: z.string().describe('Developer/operator (the project entity)'),
             institutional_backer: z.string().optional().default('').describe('PE fund, infrastructure fund, or investor behind the company. "backer not found" if unknown.'),
+            fund_experience: z.string().optional().default('').describe('"Seasoned" (5+ years US infra) or "New Entrant" (1-3 years or first fund). Flag New Entrants as stronger targets.'),
             classification: z.enum(['Active Pain', 'Capital Pattern']).describe('Active Pain = currently stuck in permitting. Capital Pattern = repeat builder, next project coming.'),
-            whats_happening: z.string().optional().default('').describe('Situational intelligence: specific project name, capacity (MW), county/location, exact agency stage (e.g. "TCEQ air quality permit review"), regulatory signal or policy shift causing friction, and timeline evidence (filed date, expected approval, current status). Must read like an internal briefing, not a search summary.'),
-            why_them: z.string().optional().default('').describe('Personalization intelligence — ties company/backer → project friction → permitting risk exposure → what\'s actionable. Must connect the specific permit delay to the financial risk the backer is carrying (IRR erosion, idle capital, LP reporting gaps) and land on why quantifying permitting risk now is the actionable step. Should read like a reason to take a meeting, not a summary of the delay.'),
-            key_contact: z.string().optional().default('').describe('Person-project-role connection. Format: "Name → Project Name → Role (Asset Manager / Investor Relations)". Multiple contacts separated by semicolon. "contact not found" if neither role found at the fund.'),
-            source: z.string().optional().default('').describe('Verifiable source URL(s). Multiple sources separated by " | " (e.g. "https://source1.com | https://source2.com"). More sources = stronger evidence.')
+            whats_happening: z.string().optional().default('').describe('Situational intelligence: project name, capacity (MW), county/location, exact agency stage, regulatory signal causing friction, timeline evidence. Must read like an internal briefing.'),
+            why_them: z.string().optional().default('').describe('Personalization intelligence — ties company/backer → project friction → permitting risk exposure → what\'s actionable. Connect permit delay to financial risk (IRR erosion, idle capital, LP reporting gaps). Should read like a reason to take a meeting.'),
+            key_contact: z.string().optional().default('').describe('"Name (Verified Title, Firm)" — the person who owns this specific asset. "contact not found" if search failed.'),
+            contact_linkedin: z.string().optional().default('').describe('Full LinkedIn profile URL (not shortened). Empty if contact not found.'),
+            contact_rationale: z.string().optional().default('').describe('One sentence naming the specific project and why this person owns the exposure. E.g. "Manages Brookfield\'s $200M stake in Scout Clean Energy; owns the ERCOT interconnection delay outcome directly."'),
+            contact_confidence: z.string().optional().default('').describe('"High" (named in press release tied to project), "Medium" (title+tenure align), or "Low" (flagged, no outreach).'),
+            source: z.string().optional().default('').describe('Verifiable source URL(s). Multiple separated by " | ". More sources = stronger evidence.')
         })).describe('Array of rows to append')
     },
     async ({ spreadsheetId, rows }) => {
@@ -450,7 +454,7 @@ server.tool(
             // Check if header exists
             const existing = await sheets.spreadsheets.values.get({
                 spreadsheetId,
-                range: `'${PROOF_TAB}'!A1:G1`
+                range: `'${PROOF_TAB}'!A1:K1`
             }).catch(() => null);
 
             const values = [];
@@ -486,10 +490,14 @@ server.tool(
         updates: z.array(z.object({
             company: z.string().describe('Company name to match (must match an existing row exactly)'),
             institutional_backer: z.string().optional().describe('New value for Institutional Backer column'),
+            fund_experience: z.string().optional().describe('New value for Fund Experience column'),
             classification: z.string().optional().describe('New value for Classification column'),
             whats_happening: z.string().optional().describe('New value for What\'s Happening column'),
             why_them: z.string().optional().describe('New value for Why Them column'),
             key_contact: z.string().optional().describe('New value for Key Contact column'),
+            contact_linkedin: z.string().optional().describe('New value for Contact LinkedIn column'),
+            contact_rationale: z.string().optional().describe('New value for Contact Rationale column'),
+            contact_confidence: z.string().optional().describe('New value for Contact Confidence column'),
             source: z.string().optional().describe('New value for Source column')
         })).describe('Array of updates, each keyed by company name')
     },
@@ -500,7 +508,7 @@ server.tool(
             // Read all data
             const result = await sheets.spreadsheets.values.get({
                 spreadsheetId,
-                range: `'${PROOF_TAB}'!A:G`
+                range: `'${PROOF_TAB}'!A:K`
             });
 
             if (!result || !result.data.values || result.data.values.length <= 1) {
@@ -531,7 +539,7 @@ server.tool(
                 const sheetRow = rowIndex + 1;
                 await sheets.spreadsheets.values.update({
                     spreadsheetId,
-                    range: `'${PROOF_TAB}'!A${sheetRow}:G${sheetRow}`,
+                    range: `'${PROOF_TAB}'!A${sheetRow}:K${sheetRow}`,
                     valueInputOption: 'USER_ENTERED',
                     requestBody: { values: [newRow] }
                 });

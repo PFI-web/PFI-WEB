@@ -87,16 +87,23 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - **"Proof Sheet" button** on dashboard — runs a deep signal-first discovery pipeline and writes structured intelligence to a Google Sheet
 - Modal: count input + helper text (Google Sheet ID is hardcoded: `1VjCQBw86I8vTTbqyJ8EyJI4XnbaZbnge2ihGsDud2uI`)
 - Task type: `proofSheet` with `{ status, count, spreadsheetId, createdAt }`
-- **Single "Proof Sheet" tab** with 7 columns: Company, Institutional Backer, Classification, What's Happening, Why Them, Key Contact, Source
+- **Row grain = project, not fund.** A single fund can appear multiple times if they back multiple projects with permitting friction. Each project gets its own row with its own contact. `count` = number of projects to find.
+- **Single "Proof Sheet" tab** with 11 columns: Company, Institutional Backer, Fund Experience, Classification, What's Happening, Why Them, Key Contact, Contact LinkedIn, Contact Rationale, Contact Confidence, Source
+- **Fund Experience**: `"Seasoned"` (5+ years US infra capital) or `"New Entrant"` (1–3 years or first infrastructure fund). New Entrants are the stronger target. US-based funds only — foreign funds with no US office/team are discarded.
 - **Situational intelligence** ("What's Happening"): project name, capacity/MW, county/location, exact agency stage, regulatory signal causing friction, timeline evidence. Must read like an internal briefing.
-- **Personalization intelligence** ("Why Them"): Ties it all together — company/backer → project friction → permitting risk exposure → what's actionable. Not "this project is delayed" but "here's the permitting risk this fund is carrying on this project and why they need to quantify it now." Connect the specific permit delay to the financial exposure the backer faces — IRR erosion, capital sitting idle, LP reporting gaps, pro forma revisions. Every "Why Them" should read like a reason the fund needs to take a meeting about permitting risk, not a summary of what's happening.
-- **Key Contact column**: `"Name | Role (Title) | Firm | Project"`. Found via web search only — no Playwright, no LinkedIn, no Hunter. Multiple contacts separated by semicolon. Example: `"Jane Doe | Asset Manager (VP Asset Management) | Stonepeak | Brazoria Solar Farm"`. `"contact not found"` if neither role found.
-- **Verification rule**: Every person-to-project connection must be verified by a real source. Finding a person at a fund does NOT mean they are connected to a specific project. Agent must run verification searches (`"[Person] [Project/Company]"`, `"[Person] [Fund] [state] infrastructure"`) and only include verified connections. Unverified = `"contact not found"`. A wrong connection is worse than no connection.
+- **Personalization intelligence** ("Why Them"): Ties it all together — company/backer → project friction → permitting risk exposure → what's actionable. Connect the specific permit delay to the financial exposure the backer faces — IRR erosion, capital sitting idle, LP reporting gaps, pro forma revisions. Every "Why Them" should read like a reason the fund needs to take a meeting about permitting risk, not a summary of what's happening.
+- **Contact search** — project-specific, not fund-level. Large funds have multiple asset managers owning different assets. Two-step process: (1) Google via `search_web` to find the LinkedIn URL using `[Fund Name] + [Project/Asset Type] + [State] + asset manager + site:linkedin.com`, (2) Playwright to confirm name, employer, and Present status on the profile page. Search hierarchy: Asset Manager → Infra Strategy/Portfolio Mgmt → IR Professional (last resort) → Do Not Use (GPs, CEOs, Chairmen, capital raising roles).
+- **Forwarding test**: Would this person immediately know which project from a one-paragraph note about permitting variance risk in TX/GA/AZ? If they'd forward it → go deeper.
+- **Playwright verification**: Name must match, employer must match the fund (current position), and they must be currently employed there. Any fail = discard and keep searching.
+- **Key Contact column**: `"Name (Verified Title, Firm)"`. `"contact not found"` if search failed.
+- **Contact LinkedIn**: Full LinkedIn profile URL (not shortened).
+- **Contact Rationale**: One sentence naming the project and why this person owns the exposure. Example: `"Manages Brookfield's $200M stake in Scout Clean Energy; owns the ERCOT interconnection delay outcome directly."`
+- **Contact Confidence**: `"High"` (named in press release tied to project), `"Medium"` (title+tenure align on LinkedIn/fund site), `"Low"` (flagged, do not send outreach). Cannot reach Medium in 20 min = flag and move on.
+- **Three required fields** to close a contact record: (1) full name + verified current title, (2) full LinkedIn URL, (3) one-sentence rationale naming the project. If any missing, record stays open.
 - Agent runs follow-up searches per company to extract project-level specifics (not just surface signals)
 - Tab and headers are created automatically by the MCP tool
-- Agent reads the sheet first via `read_proof_sheet` to check existing companies and skip duplicates
+- Agent reads the sheet first via `read_proof_sheet` to check existing projects and skip duplicates (dedup by project, not fund)
 - Results written incrementally as the agent finds them (not batched at the end)
-- `count` = exact number of companies to return. If count is 1, agent runs one search and picks one company
 - Google Sheet shared with `firebase-adminsdk-fbsvc@thepfi.iam.gserviceaccount.com`
 - Uses `googleapis` npm package with the Firebase service account credentials
 
@@ -134,8 +141,8 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - `get_daily_count(userId)` — Today's LinkedIn + email counts, limits, and remaining
 - `poll_tasks(userId)` — Check for pending tasks
 - `complete_task(userId, taskName)` — Mark task as complete
-- `read_proof_sheet(spreadsheetId)` — Read all existing rows from the "Proof Sheet" tab. Returns array of row objects (7 fields). Used before writing to check what companies are already in the sheet and avoid duplicates.
-- `write_proof_sheet(spreadsheetId, rows[])` — Append rows to a single "Proof Sheet" tab. Each row has 7 fields: company, institutional_backer, classification (Active Pain/Capital Pattern), whats_happening (situational intelligence: project name, capacity, location, agency stage, regulatory signal, timeline), why_them (personalization intelligence: person-specific, tied to key contact's role and this project's friction), key_contact (format: "Name | Role (Title) | Firm | Project"; web search only, no LinkedIn/Hunter), source. Auto-creates tab and headers. Uses `USER_ENTERED` mode.
+- `read_proof_sheet(spreadsheetId)` — Read all existing rows from the "Proof Sheet" tab. Returns array of row objects (11 fields). Used before writing to check what projects are already in the sheet and avoid duplicates.
+- `write_proof_sheet(spreadsheetId, rows[])` — Append rows to a single "Proof Sheet" tab. Each row has 11 fields: company, institutional_backer, fund_experience (Seasoned/New Entrant), classification (Active Pain/Capital Pattern), whats_happening (situational intelligence), why_them (personalization intelligence), key_contact ("Name (Verified Title, Firm)"), contact_linkedin (full URL), contact_rationale (one sentence naming project + why they own exposure), contact_confidence (High/Medium/Low), source. Auto-creates tab and headers. One row per project, not per fund.
 
 ### Environment Variables (MCP Server)
 - `TAVILY_API_KEY` — Tavily web search

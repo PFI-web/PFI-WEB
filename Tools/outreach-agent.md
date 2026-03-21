@@ -212,6 +212,13 @@ This task is a **structured intelligence version** of findLeads. It runs the sam
 3. **Search for signal strength first** — Same logic as findLeads. Use `search_web` to hunt for the strongest signals across all source categories (Energy, Data Centers, Manufacturing, Transmission) — focused on TX, GA, AZ. Search by state first. See findLeads step 2 for the full list of sources and example queries. Only run enough searches to fill the count. **Same source credibility rule as findLeads** — no source URL, no save. **Skip any company already in the sheet** (from step 2). If a project appears in a non-energy source but not in an energy queue, still classify using Active Pain / Capital Pattern logic.
 4. **Classify each result** — Decide: **Active Pain** (project currently stuck in permitting) or **Capital Pattern** (repeat builder, next project coming).
 5. **Find the institutional backer** — Same logic as findLeads step 4. After confirming permitting pain, run searches to find the PE fund or infrastructure investor behind the company. If not found after three searches, set to `"backer not found"` and continue.
+
+   **Geography filter:** US-based funds and projects only. If the institutional backer is a foreign fund with no US office or US-based infrastructure team, discard and move on.
+
+   **Fund Experience** — After identifying the backer, classify:
+   - **Seasoned:** Fund has 5+ years deploying infrastructure capital in the US
+   - **New Entrant:** Fund entered US infrastructure in the last 1–3 years or this is their first infrastructure fund
+   Flag New Entrants — they are the stronger target.
 6. **Dig into the project (Situational Intelligence)** — This is the critical depth step. For each company, run **follow-up searches** to extract project-level specifics. Do NOT rely on the initial discovery search alone. Run queries like:
    - `"[Company] [Project name] permit status 2025 2026"` — to find the exact agency stage
    - `"[Company] [Project name] delay timeline approval"` — to find the specific friction point
@@ -229,38 +236,57 @@ This task is a **structured intelligence version** of findLeads. It runs the sam
 
    If the initial search already provided most of these details, one follow-up search may be enough. If not, run up to three follow-up searches per company. The goal is specificity — not "they have permit issues" but "their 300MW Brazoria County solar project has been in ERCOT's Definitive Planning Phase since March 2025 with no timeline to proceed, coinciding with PUCT's new reliability standard changes."
 
-7. **Find and VERIFY fund-level contacts using the project record (web search only)** — You already have the project name, fund name, agency, state, and filing details. **Use that context as your search inputs** — don't search generically for roles at a fund. Use `search_web` only — **no Playwright, no LinkedIn, no Hunter**. This is intelligence gathering, not outreach enrichment.
+7. **Find the contact at the fund who owns this specific project** — Once the fund is confirmed, search for the person responsible for **this specific project**, not just anyone at the fund. Large funds have multiple asset managers, each owning different assets. You need the one whose responsibility overlaps with the specific project, state, and asset type you identified.
 
-   **Who you're looking for:**
-   - **Asset Manager** — Titles: Asset Manager, VP Asset Management, Director of Asset Management, Senior Asset Manager. They recalculate the pro forma when permits slip. They provide the raw data to IR.
-   - **IR Manager** — Titles: Investor Relations Manager, VP Investor Relations, Director of Investor Relations, Head of IR. They face the LPs and explain underperformance.
+   **Two-step search process:**
 
-   **Search strategy — project-context searches:**
-   The project record already contains the information needed to find the people. Use it:
-   - `"[Fund name] [Project name] asset manager"` — direct project connection
-   - `"[Fund name] [state] infrastructure portfolio asset management"` — regional portfolio
-   - `"[Project name] [agency e.g. FERC/ERCOT] filing contact"` — regulatory filing contacts
-   - `"[Fund name] [Developer name] investor relations"` — fund-developer connection
-   - `"[Fund name] [Project name] investor relations"` — direct project IR
+   **Step A — Google → find the LinkedIn URL.** Use `search_web` with project-specific queries:
+   ```
+   [Fund Name] + [Project Name or Asset Type] + [State] + asset manager + site:linkedin.com
+   ```
+   Example: `"Brookfield Scout Clean Energy Texas asset manager site:linkedin.com"`, NOT `"Brookfield asset manager"`
 
-   Do NOT search generically (e.g. `"[Fund name] asset manager"`) — always include project, developer, or regional context. A contact found through a project-context search is already more likely to be connected to the project.
+   **Step B — Playwright → confirm the match.** Open the LinkedIn profile URL in Playwright. Verify three things on the profile page:
+   1. **Name** matches the search result
+   2. **Employer** matches the fund (current position, not past)
+   3. **Present status** — they are currently at the fund, not departed
 
-   **⚠️ VERIFICATION RULE — NO ASSUMPTIONS:**
-   Even with project-context searches, every person-to-project connection must be **verified by a real source**, not assumed. The search returning a name near a project name is not proof of a connection.
+   If any of the three fail, discard and keep searching.
 
-   - **Verified connection** = a source explicitly names the person in relation to the project, the fund's specific infrastructure portfolio that includes this project, or the geographic region/sector this project falls under. Examples: a press release quoting them about the project, a filing listing them as a responsible party, an article naming them as overseeing the fund's energy portfolio in that state.
-   - **Unverified assumption** = you found the person's name and title at the fund, but no source connects them to this specific project or portfolio. This is NOT enough.
+   **Search in this order. Stop at the first confirmed match tied to this project:**
 
-   **If the project-context search didn't surface a verified connection**, run one follow-up:
-   - `"[Person name] [Project name or Company name]"` — direct connection
-   - `"[Person name] [Fund name] [state] infrastructure"` — portfolio/region connection
+   1. **Asset Manager** — VP, Director, Managing Director, or Senior MD of Infrastructure or Asset Management. Owns the P&L on the specific asset.
+   2. **Infrastructure Strategy or Portfolio Management** — owns the deployment thesis, not just individual assets.
+   3. **IR Professional** — Head of IR or Director of Investor Relations. Last resort only.
+   4. **Do Not Use** — General Partners, CEOs, Chairmen, or anyone in a purely capital raising role. Not close enough to the asset-level pain.
 
-   **If verified:** Include them in the Key Contact column.
-   **If NOT verified:** Set to `"contact not found"` rather than guessing. A wrong connection is worse than no connection.
+   Do NOT stop at the first asset manager you find at the fund. Confirm the contact is specifically tied to the project in question before recording.
 
-   If you find and verify both, format as: `"Jane Doe | Asset Manager (VP Asset Management) | Stonepeak | Brazoria Solar Farm; John Smith | Investor Relations (Director of IR) | Stonepeak | Brazoria Solar Farm"`
-   If you find and verify only one, that's still valid.
-   If neither is found or verified after searches, set to `"contact not found"` and continue. Do NOT skip the row — the project signal is still valuable.
+   **The forwarding test** — before recording anyone:
+   > If this person received a one-paragraph note about permitting variance risk in their specific TX, GA, or AZ portfolio, would they immediately know which project we are talking about?
+   > If yes — record them. If they would need to forward it to someone else — go one level deeper.
+
+   **Verify before recording:**
+   All verification happens in Step B (Playwright). Name, employer, and Present status must all check out before proceeding to confidence rating.
+
+   **Rate confidence before saving:**
+   - **High:** Named in a press release tied to the specific project
+   - **Medium:** Title and tenure align to the asset on LinkedIn or fund website
+   - **Low:** Flag it, do not send outreach
+   Cannot reach Medium in 20 minutes = flag and move on.
+
+   **Three required fields to close a contact record:**
+   1. Full name with verified current title
+   2. LinkedIn profile URL — full URL, not shortened
+   3. One-sentence rationale that specifically names the project and explains why this person owns the exposure
+
+   Example rationale: *"Manages Brookfield's $200M stake in Scout Clean Energy; owns the ERCOT interconnection delay outcome directly."*
+
+   If any of the three are missing, the record stays open. Do not move to the next prospect until all three are confirmed or you hit the 20-minute flag threshold.
+
+   **Same fund, multiple rows:** A single fund can appear multiple times in the proof sheet if they have multiple projects with permitting friction. Each project gets its own row with its own contact — because each project likely has a different asset manager owning it.
+
+   If contact search fails entirely, set Key Contact to `"contact not found"` and continue. Do NOT skip the row — the project signal is still valuable.
 
 8. **Write "Why Them" (Personalization Intelligence)** — This column ties it all together: company/backer → project friction → permitting risk exposure → what's actionable. The goal is to make the row read like a reason the fund needs to take a meeting about permitting risk. **Only include claims you can back with a source. No assumptions, no fabricated reasoning.**
 
@@ -274,14 +300,20 @@ This task is a **structured intelligence version** of findLeads. It runs the sam
 
 9. **Write to Google Sheet as results come in** — Do NOT wait until everything is found. Call `write_proof_sheet` as soon as you have a complete row. All rows go to a single "Proof Sheet" tab.
 
-   **Row fields:**
-   - `company`: Who they are (the developer/operator)
-   - `institutional_backer`: The PE fund, infrastructure fund, or investor behind this company. `"backer not found"` if unknown.
+   **Row fields (11 columns):**
+   - `company`: Developer/operator (the project entity)
+   - `institutional_backer`: PE fund, infrastructure fund, or investor behind this company. `"backer not found"` if unknown.
+   - `fund_experience`: `"Seasoned"` (5+ years US infra) or `"New Entrant"` (1–3 years or first fund). Flag New Entrants.
    - `classification`: `"Active Pain"` or `"Capital Pattern"`
    - `whats_happening`: Situational intelligence — project name, capacity, location, exact agency stage, regulatory signal, timeline evidence. Must read like an internal briefing.
    - `why_them`: Personalization intelligence — ties company/backer → project friction → permitting risk exposure → what's actionable. Must connect the specific permit delay to the financial risk the backer is carrying (IRR erosion, idle capital, LP reporting gaps) and land on why quantifying permitting risk now is the actionable step. Should read like a reason to take a meeting, not a summary of the delay.
-   - `key_contact`: Format: `"Name | Role (Title) | Firm | Project"`. Multiple contacts separated by semicolon. Example: `"Jane Doe | Asset Manager (VP Asset Management) | Stonepeak | Brazoria Solar Farm"`. `"contact not found"` if neither role found.
-   - `source`: Verifiable source URL(s). Can include multiple sources separated by ` | ` (e.g. `"https://source1.com | https://source2.com"`). More sources = stronger evidence. Include every source that contributed to the row — the initial signal discovery, follow-up project details, backer confirmation, and contact verification.
+   - `key_contact`: `"Name (Verified Title, Firm)"` — e.g. `"Jane Doe (VP Asset Management, Brookfield)"`. `"contact not found"` if search failed.
+   - `contact_linkedin`: Full LinkedIn profile URL (not shortened). Empty if contact not found.
+   - `contact_rationale`: One sentence naming the specific project and explaining why this person owns the exposure. Example: `"Manages Brookfield's $200M stake in Scout Clean Energy; owns the ERCOT interconnection delay outcome directly."` Empty if contact not found.
+   - `contact_confidence`: `"High"` (named in press release tied to project), `"Medium"` (title+tenure align on LinkedIn/fund site), or `"Low"` (flagged, do not send outreach). Empty if contact not found.
+   - `source`: Verifiable source URL(s). Multiple sources separated by ` | `. Include every source that contributed to the row — signal discovery, project details, backer confirmation, contact verification.
+
+   **Row grain = project, not fund.** A single fund can appear multiple times if they back multiple projects with permitting friction. Each project gets its own row with its own contact. `count` = number of projects to find. Dedup by project (check What's Happening for existing projects), not by fund or company name.
 
 10. You can call `write_proof_sheet` multiple times so results appear incrementally in the sheet.
 11. Call `complete_task`
