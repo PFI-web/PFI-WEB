@@ -40,64 +40,77 @@ Notion-inspired design language with reusable CSS classes:
 - **Mobile (≤768px)** — LOCKED IN. Nav shows "PFI" instead of full name, section 3 stacks image above text (edge-to-edge), flipper2 labels hidden, footer centered
 - **Small phone (≤400px)** — LOCKED IN. Further size reductions
 
-## Outreach System (`Team/index.html`)
+## Outreach System
 
 ### Overview
-Internal outreach automation tool at `permitfriction.com/Team`. Team members log in, manage LinkedIn leads, and use Claude Code + MCP to automate message writing and outreach.
+CLI-driven outreach automation tool. Run commands directly in Claude Code to find leads, write messages, and send outreach. All data lives in Google Sheets.
 
 ### Tech Stack
-- Single `Team/index.html` file with inline CSS and JS
-- Firebase (Firestore) for data — project: `thepfi`
-- MCP server (`Tools/mcp-server/`) bridging Claude Code ↔ Firestore
-- Claude Code for automated email outreach; LinkedIn outreach is manual via dashboard
+- MCP server (`Tools/mcp-server/`) bridging Claude Code ↔ external APIs + Google Sheets
+- Claude Code triggered via direct commands — no dashboard
 - Playwright used only during lead discovery (LinkedIn profile search), not for sending
-- No Firebase Auth — simple email-based login matching against employee list in Firestore
-
-### Screen Flow (4 screens, sequential)
-1. **Login** — Employee name cards from Firestore. Click a name → enter email → matched against `company/employees`
-2. **Onboarding** (first time only) — Install Claude Code, set up skill
-3. **Setup** — Two terminal commands: start Claude Code with MCP server, then paste polling prompt
-4. **Dashboard** — Lead table, action buttons (Find Leads, Add Lead, Write Messages, Perform Outreach, Proof Sheet)
 
 ### Architecture
-- **Portal** writes tasks to `users/{uid}/tasks/` in Firestore
-- **Claude Code** polls for tasks via MCP `poll_tasks` tool every 10s
+- **Claude Code** is triggered directly via commands (e.g. `/find-leads 5`, `/proof-sheet 10`)
 - **Claude Code** executes tasks using MCP tools + external APIs + Playwright (lead discovery only)
-- **Portal** updates in real time via Firestore `onSnapshot` listeners (leads table + daily counters)
+- All contact and intelligence data lives in **Google Sheets**
+
+### Start Command
+```bash
+cd ~/development/PFI && claude --dangerously-skip-permissions --mcp-config '{"mcpServers":{"pfi":{"command":"node","args":["Tools/mcp-server/index.js"],"env":{"TAVILY_API_KEY":"...","HUNTER_API_KEY":"...","GMAIL_USER":"...","GMAIL_APP_PASSWORD":"..."}}}}'
+```
 
 ### Lead Discovery & Outreach Flow (Signal-First, Fund-Level Targeting)
 **Core principle:** The developer/operator is the evidence that pain exists. The institutional fund behind them is the customer. The tool finds both, but outreach goes to the fund.
 
 **Pressure chain:** Project in permitting pain → Developer/operator → Who funded them → Fund-level contact
 
-1. **Find Leads** → Agent searches for signal strength first across energy and non-energy sources, focused on TX, GA, AZ:
-   - **Energy:** FERC queues, permits.performance.gov delayed milestones, state permit databases (TCEQ/GA EPD/AZ DEQ), ISO interconnection queues (ERCOT/MISO/SPP/Georgia Power/APS/SRP), capital commitments
-   - **Data Centers:** State utility commission large load interconnection requests, county zoning/special use permits, state water authority permits, Army Corps Section 404 permits, FAA obstruction evaluation filings
-   - **Manufacturing:** EPA Title V air permit applications, state NPDES industrial wastewater discharge permits, state economic development project announcements
-   - **Transmission:** State PUC/PSC certificate of convenience and necessity dockets, NEPA environmental review tracker, BLM right-of-way applications
+1. **Find Leads** → Agent searches for signal strength first, prioritizing sources by weight tier, focused on TX, GA, AZ:
+   - **Tier 1 — High-Weight (Primary Truth Sources, search first):**
+     - FERC interconnection queues (delayed study phases, withdrawals, long queue duration)
+     - ISO interconnection queues (ERCOT/MISO/SPP/Georgia Power/APS/SRP)
+     - State PUC/PSC dockets (contested permits, intervenor filings, review extensions — not just existence of dockets)
+     - EPA/NEPA environmental review databases (projects in extended or supplemental review)
+     - Army Corps Section 404/408 permit databases (approval delays)
+     - State permit databases (TCEQ/GA EPD/AZ DEQ)
+     - permits.performance.gov delayed milestones
+     - County zoning/special use permits, state water authority permits, FAA obstruction filings
+     - EPA Title V air permits, state NPDES wastewater permits, BLM right-of-way applications
+   - **Tier 2 — Medium-Weight (Ownership & Capital Mapping):**
+     - SEC Form D filings (EDGAR) — links private capital raises to projects
+     - FERC market-based rate applications — discloses generation asset ownership
+     - State utility commission ownership filings — structured ownership visibility
+   - **Tier 3 — Supporting Intelligence (Contextual Validation, never standalone):**
+     - permitting.gov press releases, capital commitment announcements, state economic development announcements
+     - Infrastructure fund portfolio pages, PitchBook/Preqin, public pension LP disclosures (CalPERS, CDPQ)
+   - **Source tier rule:** Leads backed by Tier 1 evidence are strongest. Leads sourced only from Tier 3 require at least one Tier 1/Tier 2 confirmation before saving.
    - If a project appears in a non-energy source but not in an energy queue, still classify using Active Pain / Capital Pattern logic. Do not expand geography beyond TX, GA, AZ until instructed.
 2. Each company classified as **Active Pain** (stuck in permitting now) or **Capital Pattern** (repeat builder, next project coming)
-3. **Institutional backer lookup** — After confirming permitting pain, agent searches for the PE fund / infrastructure investor behind the company (e.g. "[Company] equity partner", "[Company] backed by", "[Company] investors"). Looking for names like Stonepeak, Brookfield, KKR, Apollo, etc. If not found after 3 searches → "backer not found" (row still saved)
-4. Agent finds up to TWO fund-level contacts per firm using the project record as search context — searches combine fund name + project name + agency + state (not generic role searches). **Asset Manager** (priority 1: recalculates the pro forma when permits slip, provides raw data to IR) and **Investor Relations Manager** (priority 2: faces the LPs, explains underperformance, maintains the firm's narrative). Both saved as separate leads when found. If neither role is found at the fund, skip the company and move on
+3. **Institutional backer lookup** — Multi-step process: (A) Direct search — "[Company] equity partner", "backed by", "investors" (3 queries max). (B) Regulatory ownership filings — SEC Form D on EDGAR, FERC market-based rate applications, state PUC ownership filings (if Step A inconclusive). (C) Pension LP disclosures — CalPERS, CDPQ infrastructure commitments (last resort). If not found after all steps → "backer not found" (row still saved)
+4. Agent finds fund-level contacts per firm using the project record as search context — searches combine fund name + project name + agency + state (not generic role searches). Contact priority hierarchy:
+   - **Priority 1: Head of Asset Management / Portfolio Operations** (post-investment persona — manages execution risk on live projects, recalculates pro forma when permits slip)
+   - **Priority 2: Infrastructure / Energy Transition Partner** (pre-investment persona — active deal responsibility, evaluates permitting risk before deploying capital, has budget authority)
+   - **Priority 3: CIO** (pre-investment persona — at mid-sized funds under ~$10B AUM where decision authority is concentrated; skip at large funds)
+   - **Do Not Target as primary leads:** Investor Relations (manages LP relationships, not purchasing decisions), Research Analysts (no buying authority), Associates (no budget ownership), GPs/CEOs/Chairmen (too senior), capital raising roles
+   - **Do not stop at one contact per company.** Find all verified contacts tied to the project across priority tiers. Each saved as a separate lead with a distinct rationale. Every additional contact must pass full verification: project tie confirmed, Playwright verification (name/employer/current), forwarding test passed, three required fields complete, and rationale distinct from other contacts. Do not add contacts just to increase volume. If none of Priorities 1-3 found at the fund, skip the company and move on
 5. For each person: **always** get LinkedIn profile via Playwright, **then** try Hunter for email
 6. Email found → `channel: 'email'`, lead has both email + LinkedIn | No email → `channel: 'linkedin'`, LinkedIn only
-7. **Outreach**: Agent sends emails via Gmail SMTP only. LinkedIn connection requests are **manual** — user sends them and clicks the LinkedIn icon in the dashboard to mark complete.
+7. **Outreach**: Agent sends emails via Gmail SMTP only. LinkedIn connection requests are **manual**. Messages are **persona-aware**: post-investment contacts (Asset Management) receive pitches about execution risk and permitting friction on live projects; pre-investment contacts (Partners, CIOs) receive pitches about deal risk visibility before capital deployment.
 
 ### Proof Sheet (Structured Intelligence)
-- **"Proof Sheet" button** on dashboard — runs a deep signal-first discovery pipeline and writes structured intelligence to a Google Sheet
-- Modal: count input + helper text (Google Sheet ID is hardcoded: `1VjCQBw86I8vTTbqyJ8EyJI4XnbaZbnge2ihGsDud2uI`)
-- Task type: `proofSheet` with `{ status, count, spreadsheetId, createdAt }`
+- Run `/proof-sheet [count]` — deep signal-first discovery pipeline writing structured intelligence to Google Sheet ID `1VjCQBw86I8vTTbqyJ8EyJI4XnbaZbnge2ihGsDud2uI`
 - **Row grain = project, not fund.** A single fund can appear multiple times if they back multiple projects with permitting friction. Each project gets its own row with its own contact. `count` = number of projects to find.
-- **Single "Proof Sheet" tab** with 11 columns: Company, Institutional Backer, Fund Experience, Classification, What's Happening, Why Them, Key Contact, Contact LinkedIn, Contact Rationale, Contact Confidence, Source
-- **Fund Experience**: `"Seasoned"` (5+ years US infra capital) or `"New Entrant"` (1–3 years or first infrastructure fund). New Entrants are the stronger target. US-based funds only — foreign funds with no US office/team are discarded.
-- **Situational intelligence** ("What's Happening"): project name, capacity/MW, county/location, exact agency stage, regulatory signal causing friction, timeline evidence. Must read like an internal briefing.
-- **Personalization intelligence** ("Why Them"): Ties it all together — company/backer → project friction → permitting risk exposure → what's actionable. Connect the specific permit delay to the financial exposure the backer faces — IRR erosion, capital sitting idle, LP reporting gaps, pro forma revisions. Every "Why Them" should read like a reason the fund needs to take a meeting about permitting risk, not a summary of what's happening.
-- **Contact search** — project-specific, not fund-level. Large funds have multiple asset managers owning different assets. Two-step process: (1) Google via `search_web` to find the LinkedIn URL using `[Fund Name] + [Project/Asset Type] + [State] + asset manager + site:linkedin.com`, (2) Playwright to confirm name, employer, and Present status on the profile page. Search hierarchy: Asset Manager → Infra Strategy/Portfolio Mgmt → IR Professional (last resort) → Do Not Use (GPs, CEOs, Chairmen, capital raising roles).
+- **Single "Proof Sheet" tab** with 15 columns: Company, Institutional Backer, Fund Experience, Classification, Why Them, Key Contact, Contact LinkedIn, Contact Email, Contact Rationale, Contact Confidence, Message, Email Subject, LinkedIn Note, Email Sent, LinkedIn Sent. **No separate Source column** — all source URLs are cited inline within Why Them and Contact Rationale at the exact point where each claim is made
+- **Fund Experience**: `"New Entrant"` (1–3 years or first infrastructure fund) or `"Seasoned"` (5+ years US infra capital). **New Entrants are the priority target** — less experienced firms face more permitting friction (lack regulatory relationships, less jurisdiction-specific knowledge, more exposed to timeline surprises). Search for and prioritize New Entrant-backed projects first; fill remaining slots with Seasoned if needed. US-based funds only — foreign funds with no US office/team are discarded.
+- **Non-U.S. Companies tab**: When adding companies to this tab, confirm the firm does **not materially operate in the United States as a company**. A company belongs here only if its core operations, headquarters, and primary business activity are outside the U.S. It is acceptable if the firm is working on or participating in specific U.S. projects, but the company itself must not be U.S.-based or broadly operating in the U.S. market. If a firm has a significant operational presence in the U.S. beyond isolated project involvement, it is **not** a Non-U.S. company.
+- **Personalization intelligence** ("Why Them"): Ties it all together — company/backer → project friction → permitting risk exposure → what's actionable. Every factual claim must cite its source URL inline. Connect the specific permit delay to the financial exposure the backer faces — IRR erosion, capital sitting idle, LP reporting gaps, pro forma revisions. Every "Why Them" should read like a reason the fund needs to take a meeting about permitting risk, not a summary of what's happening.
+- **Contact search** — project-specific, not fund-level. Large funds have multiple people owning different assets. Two-step process: (1) Google via `search_web` to find LinkedIn URLs using `[Fund Name] + [Project/Asset Type] + [State] + [role] + site:linkedin.com`, (2) Playwright to confirm name, employer, and Present status on the profile page. Search hierarchy: Head of Asset Management/Portfolio Operations (post-investment) → Infrastructure/Energy Transition Partner (pre-investment) → CIO at mid-sized funds under ~$10B AUM (pre-investment) → Infra Strategy/Portfolio Mgmt. **Do not stop at one contact** — find all verified contacts tied to the project across priority tiers. Each gets their own row with a distinct rationale. Every contact must pass full verification (project tie, Playwright check, forwarding test, three required fields, distinct rationale). Do Not Target: IR, Research Analysts, Associates, GPs/CEOs/Chairmen, capital raising roles.
 - **Forwarding test**: Would this person immediately know which project from a one-paragraph note about permitting variance risk in TX/GA/AZ? If they'd forward it → go deeper.
 - **Playwright verification**: Name must match, employer must match the fund (current position), and they must be currently employed there. Any fail = discard and keep searching.
 - **Key Contact column**: `"Name (Verified Title, Firm)"`. `"contact not found"` if search failed.
 - **Contact LinkedIn**: Full LinkedIn profile URL (not shortened).
-- **Contact Rationale**: One sentence naming the project and why this person owns the exposure. Example: `"Manages Brookfield's $200M stake in Scout Clean Energy; owns the ERCOT interconnection delay outcome directly."`
+- **Contact Email**: Email address from Hunter. Empty if not found — does not block the row.
+- **Contact Rationale**: One sentence naming the project and why this person owns the exposure, **with inline source URLs for every factual claim.** Example: `"Manages Brookfield's $200M stake in Scout Clean Energy (https://brookfield.com/portfolio/scout-clean-energy); owns the ERCOT interconnection delay outcome directly (https://ercot.com/queue/project-id)."`
 - **Contact Confidence**: `"High"` (named in press release tied to project), `"Medium"` (title+tenure align on LinkedIn/fund site), `"Low"` (flagged, do not send outreach). Cannot reach Medium in 20 min = flag and move on.
 - **Three required fields** to close a contact record: (1) full name + verified current title, (2) full LinkedIn URL, (3) one-sentence rationale naming the project. If any missing, record stays open.
 - Agent runs follow-up searches per company to extract project-level specifics (not just surface signals)
@@ -108,17 +121,27 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - Uses `googleapis` npm package with the Firebase service account credentials
 
 ### Source Credibility Rules
-- Every company picked by the agent (in both `findLeads` and `proofSheet`) **must come from a real, verifiable source** with an actual URL
+- Every company picked by the agent **must come from a real, verifiable source** with an actual URL
 - Acceptable: government filings, regulatory databases (permits.performance.gov, FERC, TCEQ, etc.), major industry publications, official project announcements
 - Not acceptable: unverified sources, speculative content, AI-generated summaries, questionable/unknown websites
 - No source URL = no save. Agent skips any result it cannot verify.
 
+### Jurisdictional Verification (CRITICAL)
+Before using any permitting pain point, bottleneck, or regulatory claim about a company, the agent MUST:
+1. **Verify the permit/approval actually exists in that jurisdiction** — Not all counties have building permits. Not all project types require the same state-level permits. Confirm the specific jurisdiction (county, state, grid region) requires what you are claiming.
+2. **Verify the project type is subject to that regulation** — A project may have designed around a permit requirement (e.g., no wells = no TCEQ water use authorization). Confirm the regulatory dependency applies to this specific project structure.
+3. **Verify the agency/pipeline dependency is relevant** — If the project is not tying into FERC-regulated infrastructure, do not claim FERC is a bottleneck. Confirm the project actually interfaces with the regulatory body you are citing.
+4. **Verify active relevance** — The issue must be happening now, not hypothetical. Find evidence the company is currently dealing with the specific friction you are describing.
+
+If further research shows the permit, constraint, or dependency **does not apply** in that geography or project structure, the claim is **invalid and must be removed immediately**.
+
+**No verified source = no claim. No jurisdictional confirmation = no insight. No evidence of active relevance = do not include.**
+
+Zero tolerance for assumptions, inferred logic, or "probable scenarios." The system must prioritize credibility, precision, and defensibility over volume of insights.
+
 ### Dual-Channel Tracking
-- Leads can have email, LinkedIn, or both contact methods
-- Each channel tracked independently: `emailSent` and `linkedinSent` fields
-- **Partial completion**: Yellow badge ("Email Sent" or "LinkedIn Sent") when one channel is done
-- **Full completion**: Green "Done" badge when all available channels are complete
-- Dashboard shows a LinkedIn icon button next to partial-status leads for manual LinkedIn completion
+- Contacts can have email, LinkedIn, or both — tracked via `email_sent` and `linkedin_sent` columns in the Proof Sheet
+- Email sends are automated. LinkedIn is always manual.
 
 ### Playwright / LinkedIn Session
 - Used **only during lead discovery** (finding LinkedIn profile URLs via search)
@@ -129,20 +152,13 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - **Not used for sending connection requests** — that's manual
 
 ### MCP Server (`Tools/mcp-server/index.js`)
-13 tools exposed:
-- `search_web(query)` — Tavily API web search, returns structured results
+6 tools:
+- `search_web(query)` — Tavily web search
 - `enrich_contact(firstName, lastName, domain)` — Hunter email finder, returns email or null
-- `send_email(userId, leadId, to, subject, body)` — Gmail SMTP send, sets `emailSent: true`, only sets `done: true` if LinkedIn is also complete (or not applicable). Enforces daily email limit
-- `get_skill(userId)` — Read user's skill document
-- `get_pending_leads(userId, needsMessage?)` — Get leads where done=false
-- `save_leads(userId, leads[])` — Save new leads with dedup by LinkedIn URL and email. Includes `institutionalBacker` field for the PE fund/investor behind the company
-- `save_message(userId, leadId, message, subject?, linkedinNote?)` — Save outreach message to a lead. Email leads: `message` (body) + `subject` + optional `linkedinNote`. LinkedIn-only leads: `message` (connection note under 300 chars)
-- `mark_lead_done(userId, leadId)` — Sets `linkedinSent: true`, only sets `done: true` if email is also complete (or not applicable). Increments daily LinkedIn counter, enforces limit
-- `get_daily_count(userId)` — Today's LinkedIn + email counts, limits, and remaining
-- `poll_tasks(userId)` — Check for pending tasks
-- `complete_task(userId, taskName)` — Mark task as complete
-- `read_proof_sheet(spreadsheetId)` — Read all existing rows from the "Proof Sheet" tab. Returns array of row objects (11 fields). Used before writing to check what projects are already in the sheet and avoid duplicates.
-- `write_proof_sheet(spreadsheetId, rows[])` — Append rows to a single "Proof Sheet" tab. Each row has 11 fields: company, institutional_backer, fund_experience (Seasoned/New Entrant), classification (Active Pain/Capital Pattern), whats_happening (situational intelligence), why_them (personalization intelligence), key_contact ("Name (Verified Title, Firm)"), contact_linkedin (full URL), contact_rationale (one sentence naming project + why they own exposure), contact_confidence (High/Medium/Low), source. Auto-creates tab and headers. One row per project, not per fund.
+- `send_email(to, subject, body)` — Gmail SMTP send
+- `read_proof_sheet(spreadsheetId, tabName?)` — Read rows from any tab (default: "Proof Sheet")
+- `write_proof_sheet(spreadsheetId, rows[], tabName?)` — Append rows to any tab. Auto-creates tab and headers. 15 fields: company, institutional_backer, fund_experience, classification, why_them, key_contact, contact_linkedin, contact_email, contact_rationale, contact_confidence, message, email_subject, linkedin_note, email_sent, linkedin_sent
+- `update_proof_sheet(spreadsheetId, updates[], tabName?)` — Update existing rows by company name
 
 ### Environment Variables (MCP Server)
 - `TAVILY_API_KEY` — Tavily web search
@@ -150,34 +166,11 @@ Internal outreach automation tool at `permitfriction.com/Team`. Team members log
 - `GMAIL_USER` — Gmail address for outreach
 - `GMAIL_APP_PASSWORD` — Gmail app password
 
-### Firestore Data Model
-- `company/employees` — `{ list: [{ name, role, email }] }`
-- `company/config` — `{ skillTemplate: "..." }` with `{{name}}` and `{{role}}` placeholders
-- `users/{uid}/profile/main` — `{ onboarded, skill, name, role, linkedinLimit, emailLimit, linkedin_YYYY-MM-DD, email_YYYY-MM-DD, claudeStarted }`
-- `users/{uid}/leads/{leadId}` — `{ name, company, role, linkedin, email, institutionalBacker, channel, enrichmentSource, message, emailSubject, linkedinNote, emailSent, emailSentAt, linkedinSent, linkedinSentAt, done, createdAt, sentAt }`
-- `users/{uid}/tasks/{taskName}` — `{ status: "pending"|"complete", createdAt }`. Task names: `findLeads` (+ count), `writeMessages`, `performOutreach`, `proofSheet` (+ count, spreadsheetId)
+### Google Sheets Data Model
+All data lives in spreadsheet `1VjCQBw86I8vTTbqyJ8EyJI4XnbaZbnge2ihGsDud2uI`, shared with `firebase-adminsdk-fbsvc@thepfi.iam.gserviceaccount.com`.
 
-### Testing Mode
-**Currently active.** Both `Tools/mcp-server/index.js` and `Team/index.html` have a `ROOT_COLLECTION` constant set to `'test'` instead of `'users'`. This routes all reads/writes to the `test` Firestore collection. Test data seeded via `Tools/seed/seed-test.js`. **Switch back to `'users'` in both files when done testing.**
-
-### Dashboard UI
-- Lead table columns: Name | Role | Company | Backer | Channel | Contact | Message | Status
-- Lead table with real-time Firestore `onSnapshot` listeners
-- Message modal (popup) for viewing/editing email and LinkedIn messages separately
-- Status column: Pending (gray) → partial (yellow, "Email Sent" or "LinkedIn Sent") → Done (green)
-- LinkedIn icon button appears next to partial-status leads for manual completion
-- Daily counters (LinkedIn + email) update in real time via `onSnapshot`
-
-### Firestore Rules
-- `company/*` — read: open, write: console only
-- `users/*` — read/write: open (internal tool)
-- `test/*` — read/write: open (testing only, remove when done)
-
-### Skill System
-Master skill template in `company/config` gets personalized per user (replace `{{name}}` and `{{role}}`). Claude Code sets up the Claude Project with instructions automatically on first run.
-
-### Daily Limits
-Default: 20/day for both LinkedIn and email (separate counters). Stored as `linkedin_YYYY-MM-DD` and `email_YYYY-MM-DD` fields. Top bar shows both counters. Color: gray (safe) → orange (80%) → red (at limit). `mark_lead_done` enforces LinkedIn limit server-side, `send_email` enforces email limit server-side.
+- **"Proof Sheet" tab** — `company, institutional_backer, fund_experience, classification, why_them, key_contact, contact_linkedin, contact_email, contact_rationale, contact_confidence, message, email_subject, linkedin_note, email_sent, linkedin_sent`
+- **"Learning Track" tab** — `name, company, role, related_project, related_friction, linkedin, email, channel, message, email_subject, linkedin_note, email_sent, linkedin_sent`
 
 ## Assets
 - Images live in `assets/`
@@ -186,20 +179,15 @@ Default: 20/day for both LinkedIn and email (separate counters). Stored as `link
 ## File Map
 ```
 PFI/
-├── index.html                    # Marketing site
-├── Team/
-│   └── index.html                # Outreach system (login + onboarding + dashboard)
+├── index.html                          # Marketing site
 ├── Tools/
 │   ├── mcp-server/
-│   │   ├── index.js              # MCP server (Firestore bridge)
+│   │   ├── index.js                    # MCP server (Sheets + email + search)
 │   │   └── package.json
-│   ├── seed/
-│   │   ├── seed.js               # Firestore seed script (production)
-│   │   ├── seed-test.js          # Test data seed script (test collection)
-│   │   └── package.json
-│   └── outreach-agent.md          # Agent instructions (polling, task handlers, LinkedIn safety rules)
-├── firestore.rules
-├── firebase.json
+│   ├── outreach-agent.md               # Agent instructions (task handlers, LinkedIn safety rules)
+│   ├── PFI_Learning_Track_Addition.md  # Learning track instructions
+│   ├── P.md                            # Implementation principles
+│   └── SETUP.md                        # API keys and start command
 ├── assets/
 ├── CNAME
 ├── CLAUDE.md
