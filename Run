@@ -1,5 +1,11 @@
+# Marketing Site (local dev server)
 cd /Users/alexpozo/development/PFI && npx serve .
 
-cd ~/development/PFI && claude --dangerously-skip-permissions --mcp-config '{"mcpServers":{"pfi":{"command":"node","args":["Tools/mcp-server/index.js"],"env":{"TAVILY_API_KEY":"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","HUNTER_API_KEY":"2a84f8211f4137f7d71cd6441a3abc14bb1c0166","GMAIL_USER":"ap@permitfriction.com","GMAIL_APP_PASSWORD":"kmwx wopw jhnf izpz"}}}}'
+# Outreach Agent (Claude Code + MCP)
+cd ~/development/PFI && claude --dangerously-skip-permissions --mcp-config '{"mcpServers":{"pfi":{"command":"node","args":["Tools/mcp-server/index.js"],"env":{"TAVILY_API_KEY":"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","HUNTER_API_KEY":"0aa8fe805f13dac9ea4ba276c364892e2d97c184","GMAIL_USER":"ap@permitfriction.com","GMAIL_APP_PASSWORD":"kmwx wopw jhnf izpz"}}}}'
 
-Read Tools/outreach-agent.md 
+# First thing to run in the agent session
+Read Tools/outreach-agent.md and Tools/PFI_Learning_Track_Addition. Task 
+
+/proof-sheet [count]
+/find-learning-contacts [count]

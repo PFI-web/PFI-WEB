@@ -64,11 +64,31 @@ Targets ground-level operators who live inside permitting friction every day but
    - Investor Relations, Business Development, anyone in a capital raising role
    - Any firm whose entire client base is one developer you are targeting through the Outreach Track
 
-4. **Verify via Playwright** — same LinkedIn verification as the Outreach Track. Name, employer, current status must all check out. Confirm they work on energy/infrastructure permitting specifically, not unrelated practice areas.
+4. **Jurisdiction-expertise verification (REQUIRED before Playwright):**
 
-5. **Enrich contacts** — LinkedIn via Playwright (required), email via Hunter (LinkedIn-only is acceptable and expected for smaller firms). Set `channel`: `'email'` if Hunter returns an email, `'linkedin'` if not.
+   The searches in step 3 find people by role and geography — but that doesn't prove they work on the right permit type in the right jurisdiction. Before spending time on Playwright verification, run one confirmation search per candidate:
 
-6. **Write rows to the "Learning Track" tab** via `write_proof_sheet`. Check existing rows first via `read_proof_sheet` to skip duplicates (dedup by LinkedIn URL). Each row has these columns:
+   ```
+   "[Person name] [Company] [specific permit type or agency] [state]"
+   ```
+
+   Examples:
+   - `"Sarah Chen SWCA TCEQ air quality Texas"` — confirms she works on TCEQ air permits, not wetland delineation in Florida
+   - `"Mark Rivera Whitley Penn energy zoning Brazoria County"` — confirms he handles energy zoning in the right county
+   - `"Lisa Park Terracon NEPA environmental review Georgia"` — confirms NEPA work in the right state
+
+   **What you're confirming:** The person works on **that permit type** (or closely related regulatory work) **in that jurisdiction**. You do NOT need proof they touched the exact project — independent consultants work across many projects. You need proof their expertise matches the `related_friction` you're about to write into their row.
+
+   **Pass:** Search returns evidence they work on that permit type in that state/jurisdiction → proceed to Playwright.
+   **Fail:** No evidence, or evidence shows they work on a different permit type or different geography → discard and search for the next candidate.
+
+   This prevents writing a `related_friction` that the contact has no connection to — which is what makes the difference between a credible message and a bot-generated one.
+
+5. **Verify via Playwright** — same LinkedIn verification as the Outreach Track. Name, employer, current status must all check out. Confirm they work on energy/infrastructure permitting specifically, not unrelated practice areas.
+
+6. **Enrich contacts** — LinkedIn via Playwright (required), email via Hunter (LinkedIn-only is acceptable and expected for smaller firms). Set `channel`: `'email'` if Hunter returns an email, `'linkedin'` if not.
+
+7. **Write rows to the "Learning Track" tab** via `write_proof_sheet`. Check existing rows first via `read_proof_sheet` to skip duplicates (dedup by LinkedIn URL). Each row has these columns:
 
    | Column | Content |
    |--------|---------|
@@ -81,10 +101,6 @@ Targets ground-level operators who live inside permitting friction every day but
    | email | Email if found via Hunter, otherwise blank |
    | channel | `email` if Hunter found an email, `linkedin` if not |
    | message | Leave blank — filled by writeLearningMessages |
-   | email_subject | Leave blank — filled by writeLearningMessages |
-   | linkedin_note | Leave blank — filled by writeLearningMessages |
-   | email_sent | Leave blank — filled by performLearningOutreach |
-   | linkedin_sent | Leave blank — filled by performLearningOutreach |
 
 
 ---
@@ -96,39 +112,89 @@ Targets ground-level operators who live inside permitting friction every day but
 
 3. **Jurisdictional verification (CRITICAL — same standard as the Outreach Track):** Review each row's `related_friction` field. Verify every regulatory claim before referencing it. If you cannot verify it, do not include it.
 
-4. **Tone — this is fundamentally different from Outreach Track messages:**
+4. **Identity and Tone:**
 
-   Learning Track messages do NOT pitch anything. The purpose is to learn from someone who knows more than you.
+   You are a Penn State student researching permitting delays in energy infrastructure. You are NOT pitching, NOT selling, NOT explaining a product. The purpose is to learn from someone who knows more than you.
 
-   - You are a researcher, not a salesperson
-   - You noticed their expertise in a specific jurisdiction/permit type and want to understand ground-level reality
-   - You are not selling, not asking for introductions, not asking for proprietary information
-   - You are asking for 15 minutes of their perspective
+   Every message must feel 1:1 — fully personalized to the contact's specific work, project, filing, or jurisdiction. No generic templates. No filler. No jargon.
 
-   **Message principles:**
-   - Reference the specific jurisdiction and permit type you identified — shows you did your homework. Do NOT name the specific developer or project — reference geography and permit type generally instead.
-   - Ask ONE or TWO precise questions that only someone in their position would know. Examples:
-     - "I've been tracking ERCOT interconnection timelines for large-scale solar in West Texas — from the outside it looks like the Definitive Planning Phase is where things stall most, but I'm curious whether that matches what you're seeing."
-     - "I'm researching TCEQ air quality permit timelines for power generation in the Permian Basin — trying to understand whether the 8-12 month window I'm seeing in the data is typical right now or has shifted recently."
-   - Keep it short: 2-3 sentences for email, under 300 characters for LinkedIn
-   - Do NOT mention PFI, do not mention an index, do not mention a product
+   **Humility on research:** When referencing the contact's role or work, hedge it — you found this through research and you might have it slightly wrong. Use phrasing like "if I'm reading it right, you [role/work detail]" rather than stating their work as fact. This signals that you're a student doing genuine research, not a bot scraping their profile.
 
-5. **Write messages based on available contact info:**
-   - Has email + LinkedIn → write both: email (subject + body) AND LinkedIn note (under 300 chars)
-   - Has email only → email only
-   - Has LinkedIn only → LinkedIn note only
+   **Connect their work to context:** After the hedge, tie their work to something relevant that makes the outreach feel natural — e.g., "which is really interesting given [current pressure, regulatory shift, or trend in their jurisdiction]." This shows you understand why their specific experience matters, not just what their title is.
 
-6. Write the filled messages back to the Sheet by updating the relevant rows via `write_proof_sheet`
+5. **Inputs per contact:** Use these fields from the Learning Track row to personalize:
+   - `name` — Full name
+   - `role` — Their actual title
+   - `company` — Their employer
+   - `related_project` — Project name + developer that surfaced them
+   - `related_friction` — Specific permitting issue identified
+
+6. **Question Logic (MANDATORY):**
+
+   Every question must validate one of these four hypotheses. Select the **most relevant questions per person** based on their role and what they can realistically answer:
+
+   **A. Is the problem real? (Are delays actually unpredictable?)**
+   Ask whether delays are predictable and manageable, or blowing up in ways nobody expected. If they say things are on track and predictable, PFI is dead. If things are chaotic, PFI has a reason to exist.
+
+   **B. Is the problem unsolved? (Has their current knowledge ever been wrong?)**
+   Don't just ask where they get their information — ask whether that information has ever failed them. "Has a project blown up in a way your existing knowledge didn't prepare you for?" separates "I don't have a tool" from "I actually need a tool."
+
+   **C. Who takes the financial hit? (Do capital partners know in real time or late?)**
+   The consultant sees the project stall but may not see the LP reporting gap or IRR erosion upstream. Pressure test by asking: "When a project you're working on gets frozen, what happens upstream? Does the developer's capital partner know what's going on in real time, or do they find out late?" This reveals whether there's an information gap between the ground and the people writing checks.
+
+   **D. Does lack of broader visibility cause real impact? (Has something outside their tracked scope recently affected them?)**
+   Don't describe a hypothetical tool and ask if it sounds useful — that's leading. Instead ask behaviorally: "In the last six months, has something that happened in a jurisdiction you weren't tracking directly affected you or your clients?" If yes, the bird's eye view would have prevented real damage. If no, they don't need it.
+
+7. **Email format:**
+
+   - Opens with: "I'm a student at Penn State researching permitting delays in energy infrastructure."
+   - Second sentence: hedge on their work + contextual hook — e.g., "I came across your work at [Company] — if I'm reading it right, you [role/work detail], which is [contextual connection to current friction in their jurisdiction]."
+   - Then a brief transition into questions — e.g., "A few questions if you have a minute:"
+   - Max 3 questions (selected from the question logic above)
+   - Close with a low-pressure ask — e.g., "Any perspective would be really helpful — even a couple sentences. Thank you for your time."
+   - **No dashes, no bullet points, no numbered lists in the email body.** Write in natural flowing sentences and paragraphs like a real person would. Bullets and dashes make it feel automated.
+   - Fully personalized to their work — reference their jurisdiction, permit type, or filing
+   - Do NOT name the specific developer or project — reference geography and permit type generally
+   - Only ask what they can realistically answer given their role
+   - No jargon, no fluff, no pitch, no mention of PFI or any product
+   - Subject line: short, specific to their jurisdiction/expertise
+
+8. **LinkedIn Connection Note format (CRITICAL CONSTRAINTS):**
+
+   - **Max ~300 characters total** — this is a connection request note, NOT a message
+   - Must mention their specific work/project/jurisdiction
+   - Must state you're a Penn State student researching permitting delays
+   - Ask **exactly ONE sharp question** (selected from the question logic above)
+   - No filler, no multiple questions, no pitch
+   - Single tight paragraph
+
+9. **Write messages based on the `channel` field:**
+   - `channel: email` → write the full email (subject line on the first line, blank line, then body) into `message`.
+   - `channel: linkedin` → write the LinkedIn connection note (≤300 chars) into `message`.
+
+10. **Constraints checklist (every message must pass ALL):**
+    - [ ] No pitching
+    - [ ] No explaining PFI or any product
+    - [ ] No leading statements ("wouldn't it be useful if…")
+    - [ ] No generic templates — every message feels 1:1
+    - [ ] Email ≤ 3 questions, LinkedIn = exactly 1 question
+    - [ ] LinkedIn note ≤ 300 characters
+    - [ ] Only references verified jurisdictional claims
+    - [ ] Respects channel — email contacts get email only, LinkedIn contacts get LinkedIn note only
+    - [ ] Hedges on research about the person's role/work (never states it as certain fact)
+
+11. Write the filled messages back to the Sheet by updating the relevant rows via `update_proof_sheet` (tabName: "Learning Track"). Set:
+    - `message` — the full email (subject line first, then body) for email-channel contacts, or the LinkedIn connection note for linkedin-channel contacts
 
 ---
 
 ## Task Handler: performLearningOutreach
 
 1. Call `read_proof_sheet` on the "Learning Track" tab
-2. Filter to rows that have a `message` and `email_sent` is blank
+2. Filter to rows that have an `message` and `channel: email`
 3. Call `get_daily_count` to check remaining email sends
-4. For each row with an email address: call `send_email`. Same sending rules as the Outreach Track (3-second wait, stop on LIMIT_REACHED). Mark `email_sent` in the Sheet after each send.
-5. LinkedIn sends are manual — user handles them directly and marks `linkedin_sent` in the Sheet.
+4. For each row with an email address: extract the subject line (first line of `message`) and body (remainder). Call `send_email`. Same sending rules as the Outreach Track (3-second wait, stop on LIMIT_REACHED).
+5. LinkedIn sends are manual — user handles them directly.
 
 ---
 

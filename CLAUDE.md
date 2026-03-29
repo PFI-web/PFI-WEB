@@ -168,7 +168,7 @@ Zero tolerance for assumptions, inferred logic, or "probable scenarios." The sys
 All data lives in spreadsheet `1VjCQBw86I8vTTbqyJ8EyJI4XnbaZbnge2ihGsDud2uI`, shared with `firebase-adminsdk-fbsvc@thepfi.iam.gserviceaccount.com`.
 
 - **"Proof Sheet" tab** — `company, institutional_backer, fund_experience, classification, why_them, key_contact, contact_linkedin, contact_email, contact_rationale, contact_confidence`
-- **"Learning Track" tab** — `name, company, role, related_project, related_friction, linkedin, email, channel`
+- **"Learning Track" tab** — `name, company, role, related_project, related_friction, linkedin, email, channel, message`
 
 ## Assets
 - Images live in `assets/`

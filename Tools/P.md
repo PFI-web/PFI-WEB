@@ -1,4 +1,3 @@
-Here is your full **P.md** — clean, minimal, copy-paste ready:
 
 ---
 

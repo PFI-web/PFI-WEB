@@ -70,11 +70,11 @@ server.tool(
 // ===== enrich_contact =====
 server.tool(
     'enrich_contact',
-    'Find email for a person using Hunter.io Email Finder. Returns { email, source } or { email: null } if not found.',
+    'Find an email address using Hunter.io Email Finder. Pass first name, last name, and company domain to discover their email.',
     {
-        firstName: z.string().describe('First name'),
-        lastName: z.string().describe('Last name'),
-        domain: z.string().describe('Company domain (e.g. stripe.com)')
+        firstName: z.string().describe('First name of the person'),
+        lastName: z.string().describe('Last name of the person'),
+        domain: z.string().describe('Company domain (e.g. swca.com)')
     },
     async ({ firstName, lastName, domain }) => {
         const apiKey = process.env.HUNTER_API_KEY;
@@ -83,9 +83,14 @@ server.tool(
         const res = await fetch(url);
         if (!res.ok) return textResult(JSON.stringify({ email: null, source: 'hunter', error: res.status }));
         const data = await res.json();
-        const email = data.data?.email || null;
-        const confidence = data.data?.score || 0;
-        return textResult(JSON.stringify({ email, confidence, source: 'hunter' }));
+        const result = data.data || {};
+        return textResult(JSON.stringify({
+            email: result.email || null,
+            score: result.score || 0,
+            position: result.position || null,
+            company: result.company || null,
+            source: 'hunter'
+        }));
     }
 );
 
@@ -115,6 +120,42 @@ const PROOF_TAB = 'Proof Sheet';
 const PROOF_HEADERS = ['Company', 'Institutional Backer', 'Fund Experience', 'Classification', 'Why Them', 'Key Contact', 'Contact LinkedIn', 'Contact Email', 'Contact Rationale', 'Contact Confidence', 'Message', 'Email Subject', 'LinkedIn Note', 'Email Sent', 'LinkedIn Sent'];
 const PROOF_FIELDS = ['company', 'institutional_backer', 'fund_experience', 'classification', 'why_them', 'key_contact', 'contact_linkedin', 'contact_email', 'contact_rationale', 'contact_confidence', 'message', 'email_subject', 'linkedin_note', 'email_sent', 'linkedin_sent'];
 
+const LEARNING_TRACK_TAB = 'Learning Track';
+const LEARNING_TRACK_HEADERS = ['Name', 'Company', 'Role', 'Related Project', 'Related Friction', 'LinkedIn', 'Email', 'Channel', 'Message'];
+const LEARNING_TRACK_FIELDS = ['name', 'company', 'role', 'related_project', 'related_friction', 'linkedin', 'email', 'channel', 'message'];
+
+function schemaForTab(tabName) {
+    if (tabName === LEARNING_TRACK_TAB) {
+        return { headers: LEARNING_TRACK_HEADERS, fields: LEARNING_TRACK_FIELDS, endCol: 'I' };
+    }
+    return { headers: PROOF_HEADERS, fields: PROOF_FIELDS, endCol: 'O' };
+}
+
+// Set cells to CLIP wrapping so rows stay uniform height
+async function clipCells(sheets, spreadsheetId, tabName, sheetRow, startCol, endColIdx) {
+    const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties(sheetId,title)' });
+    const sheet = spreadsheet.data.sheets.find(s => s.properties.title === tabName);
+    if (!sheet) return;
+    await sheets.spreadsheets.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+            requests: [{
+                repeatCell: {
+                    range: {
+                        sheetId: sheet.properties.sheetId,
+                        startRowIndex: sheetRow - 1,
+                        endRowIndex: sheetRow,
+                        startColumnIndex: startCol,
+                        endColumnIndex: endColIdx
+                    },
+                    cell: { userEnteredFormat: { wrapStrategy: 'CLIP' } },
+                    fields: 'userEnteredFormat.wrapStrategy'
+                }
+            }]
+        }
+    });
+}
+
 // ===== read_proof_sheet =====
 server.tool(
     'read_proof_sheet',
@@ -125,6 +166,7 @@ server.tool(
     },
     async ({ spreadsheetId, tabName = PROOF_TAB }) => {
         try {
+            const { fields, endCol } = schemaForTab(tabName);
             const sheets = getSheetsClient();
             const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties.title' });
             const existingTabs = new Set(spreadsheet.data.sheets.map(s => s.properties.title));
@@ -133,7 +175,7 @@ server.tool(
             }
             const result = await sheets.spreadsheets.values.get({
                 spreadsheetId,
-                range: `'${tabName}'!A:O`
+                range: `'${tabName}'!A:${endCol}`
             }).catch(() => null);
             if (!result || !result.data.values || result.data.values.length <= 1) {
                 return textResult(JSON.stringify({ rows: [], message: `"${tabName}" tab exists but has no data rows.` }));
@@ -141,7 +183,7 @@ server.tool(
             const dataRows = result.data.values.slice(1);
             const rows = dataRows.map(row => {
                 const obj = {};
-                PROOF_FIELDS.forEach((field, i) => { obj[field] = row[i] || ''; });
+                fields.forEach((field, i) => { obj[field] = row[i] || ''; });
                 return obj;
             });
             return textResult(JSON.stringify({ rows, count: rows.length }));
@@ -154,30 +196,15 @@ server.tool(
 // ===== write_proof_sheet =====
 server.tool(
     'write_proof_sheet',
-    'Append rows to a tab in a Google Sheet. Pass tabName to write to a specific tab (defaults to "Proof Sheet"). Tab and headers are created automatically.',
+    'Append rows to a tab in a Google Sheet. Pass tabName to write to a specific tab (defaults to "Proof Sheet"). Tab and headers are created automatically. Proof Sheet fields: company, institutional_backer, fund_experience, classification, why_them, key_contact, contact_linkedin, contact_email, contact_rationale, contact_confidence, message, email_subject, linkedin_note, email_sent, linkedin_sent. Learning Track fields: name, company, role, related_project, related_friction, linkedin, email, channel.',
     {
         spreadsheetId: z.string().describe('Google Sheet ID (from the URL)'),
         tabName: z.string().optional().describe('Tab name to write to (default: "Proof Sheet")'),
-        rows: z.array(z.object({
-            company: z.string().describe('Developer/operator (the project entity)'),
-            institutional_backer: z.string().optional().default('').describe('PE fund or investor behind the company. "backer not found" if unknown.'),
-            fund_experience: z.string().optional().default('').describe('"Seasoned" or "New Entrant"'),
-            classification: z.enum(['Active Pain', 'Capital Pattern']).describe('Active Pain = currently stuck in permitting. Capital Pattern = repeat builder.'),
-            why_them: z.string().optional().default('').describe('Personalization intelligence with inline citations — ties backer → project friction → financial risk exposure → why act now.'),
-            key_contact: z.string().optional().default('').describe('"Name (Verified Title, Firm)". "contact not found" if search failed.'),
-            contact_linkedin: z.string().optional().default('').describe('Full LinkedIn profile URL. Empty if not found.'),
-            contact_email: z.string().optional().default('').describe('Email from Hunter. Empty if not found.'),
-            contact_rationale: z.string().optional().default('').describe('One sentence naming the project and why this person owns the exposure, with inline source URLs.'),
-            contact_confidence: z.string().optional().default('').describe('"High", "Medium", or "Low".'),
-            message: z.string().optional().default('').describe('Outreach email body. Leave blank — filled by writeMessages.'),
-            email_subject: z.string().optional().default('').describe('Email subject line. Leave blank — filled by writeMessages.'),
-            linkedin_note: z.string().optional().default('').describe('LinkedIn connection note under 300 chars. Leave blank — filled by writeMessages.'),
-            email_sent: z.string().optional().default('').describe('Date email was sent (YYYY-MM-DD). Leave blank — filled by performOutreach.'),
-            linkedin_sent: z.string().optional().default('').describe('Date LinkedIn request was sent (YYYY-MM-DD). Leave blank — filled manually.')
-        })).describe('Array of rows to append')
+        rows: z.array(z.record(z.string(), z.string())).describe('Array of row objects. Keys must match the tab schema (see tool description).')
     },
     async ({ spreadsheetId, tabName = PROOF_TAB, rows }) => {
         try {
+            const { headers, fields, endCol } = schemaForTab(tabName);
             const sheets = getSheetsClient();
             const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties.title' });
             const existingTabs = new Set(spreadsheet.data.sheets.map(s => s.properties.title));
@@ -189,14 +216,14 @@ server.tool(
             }
             const existing = await sheets.spreadsheets.values.get({
                 spreadsheetId,
-                range: `'${tabName}'!A1:O1`
+                range: `'${tabName}'!A1:${endCol}1`
             }).catch(() => null);
             const values = [];
             if (!existing || !existing.data.values || existing.data.values.length === 0) {
-                values.push(PROOF_HEADERS);
+                values.push(headers);
             }
             for (const row of rows) {
-                values.push(PROOF_FIELDS.map(f => row[f] || ''));
+                values.push(fields.map(f => row[f] || ''));
             }
             await sheets.spreadsheets.values.append({
                 spreadsheetId,
@@ -215,34 +242,20 @@ server.tool(
 // ===== update_proof_sheet =====
 server.tool(
     'update_proof_sheet',
-    'Update existing rows in a Google Sheet tab by matching on company name. Pass tabName to target a specific tab (defaults to "Proof Sheet"). Overwrites only the fields you provide.',
+    'Update existing rows in a Google Sheet tab by matching on the first column (company for Proof Sheet, name for Learning Track). Pass tabName to target a specific tab (defaults to "Proof Sheet"). Overwrites only the fields you provide.',
     {
         spreadsheetId: z.string().describe('Google Sheet ID (from the URL)'),
         tabName: z.string().optional().describe('Tab name to update (default: "Proof Sheet")'),
-        updates: z.array(z.object({
-            company: z.string().describe('Company name to match (must match an existing row exactly)'),
-            institutional_backer: z.string().optional(),
-            fund_experience: z.string().optional(),
-            classification: z.string().optional(),
-            why_them: z.string().optional(),
-            key_contact: z.string().optional(),
-            contact_linkedin: z.string().optional(),
-            contact_email: z.string().optional(),
-            contact_rationale: z.string().optional(),
-            contact_confidence: z.string().optional(),
-            message: z.string().optional(),
-            email_subject: z.string().optional(),
-            linkedin_note: z.string().optional(),
-            email_sent: z.string().optional(),
-            linkedin_sent: z.string().optional()
-        })).describe('Array of updates, each keyed by company name')
+        updates: z.array(z.record(z.string(), z.string())).describe('Array of row objects. The first-column field (company or name) is used to match existing rows.')
     },
     async ({ spreadsheetId, tabName = PROOF_TAB, updates }) => {
         try {
+            const { fields, endCol } = schemaForTab(tabName);
+            const matchKey = fields[0];
             const sheets = getSheetsClient();
             const result = await sheets.spreadsheets.values.get({
                 spreadsheetId,
-                range: `'${tabName}'!A:O`
+                range: `'${tabName}'!A:${endCol}`
             });
             if (!result || !result.data.values || result.data.values.length <= 1) {
                 return textResult(`ERROR: No data rows found in "${tabName}".`);
@@ -251,20 +264,25 @@ server.tool(
             let updatedCount = 0;
             const notFound = [];
             for (const update of updates) {
-                const rowIndex = allRows.findIndex((row, i) => i > 0 && row[0] && row[0].trim().toLowerCase() === update.company.trim().toLowerCase());
-                if (rowIndex === -1) { notFound.push(update.company); continue; }
+                const matchValue = update[matchKey];
+                if (!matchValue) { notFound.push('(missing match key)'); continue; }
+                const rowIndex = allRows.findIndex((row, i) => i > 0 && row[0] && row[0].trim().toLowerCase() === matchValue.trim().toLowerCase());
+                if (rowIndex === -1) { notFound.push(matchValue); continue; }
                 const existingRow = allRows[rowIndex];
-                const newRow = PROOF_FIELDS.map((field, colIdx) => {
-                    if (field === 'company') return existingRow[colIdx] || '';
+                const newRow = fields.map((field, colIdx) => {
+                    if (field === matchKey) return existingRow[colIdx] || '';
                     return update[field] !== undefined ? update[field] : (existingRow[colIdx] || '');
                 });
                 const sheetRow = rowIndex + 1;
                 await sheets.spreadsheets.values.update({
                     spreadsheetId,
-                    range: `'${tabName}'!A${sheetRow}:J${sheetRow}`,
+                    range: `'${tabName}'!A${sheetRow}:${endCol}${sheetRow}`,
                     valueInputOption: 'USER_ENTERED',
                     requestBody: { values: [newRow] }
                 });
+                // Clip cells so row height stays uniform
+                const endColIdx = fields.length;
+                await clipCells(sheets, spreadsheetId, tabName, sheetRow, 0, endColIdx);
                 allRows[rowIndex] = newRow;
                 updatedCount++;
             }
