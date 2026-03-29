@@ -43,7 +43,7 @@ Notion-inspired design language with reusable CSS classes:
 ## Outreach System
 
 ### Overview
-CLI-driven outreach automation tool. Run commands directly in Claude Code to find leads, write messages, and send outreach. All data lives in Google Sheets.
+CLI-driven outreach automation tool. Run commands directly in Claude Code to find leads and research them. All data lives in Google Sheets.
 
 ### Tech Stack
 - MCP server (`Tools/mcp-server/`) bridging Claude Code ↔ external APIs + Google Sheets
@@ -94,13 +94,12 @@ cd ~/development/PFI && claude --dangerously-skip-permissions --mcp-config '{"mc
    - **Do Not Target as primary leads:** Investor Relations (manages LP relationships, not purchasing decisions), Research Analysts (no buying authority), Associates (no budget ownership), GPs/CEOs/Chairmen (too senior), capital raising roles
    - **Do not stop at one contact per company.** Find all verified contacts tied to the project across priority tiers. Each saved as a separate lead with a distinct rationale. Every additional contact must pass full verification: project tie confirmed, Playwright verification (name/employer/current), forwarding test passed, three required fields complete, and rationale distinct from other contacts. Do not add contacts just to increase volume. If none of Priorities 1-3 found at the fund, skip the company and move on
 5. For each person: **always** get LinkedIn profile via Playwright, **then** try Hunter for email
-6. Email found → `channel: 'email'`, lead has both email + LinkedIn | No email → `channel: 'linkedin'`, LinkedIn only
-7. **Outreach**: Agent sends emails via Gmail SMTP only. LinkedIn connection requests are **manual**. Messages are **persona-aware**: post-investment contacts (Asset Management) receive pitches about execution risk and permitting friction on live projects; pre-investment contacts (Partners, CIOs) receive pitches about deal risk visibility before capital deployment.
+6. Email found → stored in `contact_email`. No email → field left blank. Both LinkedIn and email stored in the Proof Sheet for use in outreach.
 
 ### Proof Sheet (Structured Intelligence)
 - Run `/proof-sheet [count]` — deep signal-first discovery pipeline writing structured intelligence to Google Sheet ID `1VjCQBw86I8vTTbqyJ8EyJI4XnbaZbnge2ihGsDud2uI`
 - **Row grain = project, not fund.** A single fund can appear multiple times if they back multiple projects with permitting friction. Each project gets its own row with its own contact. `count` = number of projects to find.
-- **Single "Proof Sheet" tab** with 15 columns: Company, Institutional Backer, Fund Experience, Classification, Why Them, Key Contact, Contact LinkedIn, Contact Email, Contact Rationale, Contact Confidence, Message, Email Subject, LinkedIn Note, Email Sent, LinkedIn Sent. **No separate Source column** — all source URLs are cited inline within Why Them and Contact Rationale at the exact point where each claim is made
+- **Single "Proof Sheet" tab** with 10 columns: Company, Institutional Backer, Fund Experience, Classification, Why Them, Key Contact, Contact LinkedIn, Contact Email, Contact Rationale, Contact Confidence. **No separate Source column** — all source URLs are cited inline within Why Them and Contact Rationale at the exact point where each claim is made
 - **Fund Experience**: `"New Entrant"` (1–3 years or first infrastructure fund) or `"Seasoned"` (5+ years US infra capital). **New Entrants are the priority target** — less experienced firms face more permitting friction (lack regulatory relationships, less jurisdiction-specific knowledge, more exposed to timeline surprises). Search for and prioritize New Entrant-backed projects first; fill remaining slots with Seasoned if needed. US-based funds only — foreign funds with no US office/team are discarded.
 - **Non-U.S. Companies tab**: When adding companies to this tab, confirm the firm does **not materially operate in the United States as a company**. A company belongs here only if its core operations, headquarters, and primary business activity are outside the U.S. It is acceptable if the firm is working on or participating in specific U.S. projects, but the company itself must not be U.S.-based or broadly operating in the U.S. market. If a firm has a significant operational presence in the U.S. beyond isolated project involvement, it is **not** a Non-U.S. company.
 - **Personalization intelligence** ("Why Them"): Ties it all together — company/backer → project friction → permitting risk exposure → what's actionable. Every factual claim must cite its source URL inline. Connect the specific permit delay to the financial exposure the backer faces — IRR erosion, capital sitting idle, LP reporting gaps, pro forma revisions. Every "Why Them" should read like a reason the fund needs to take a meeting about permitting risk, not a summary of what's happening.
@@ -139,9 +138,9 @@ If further research shows the permit, constraint, or dependency **does not apply
 
 Zero tolerance for assumptions, inferred logic, or "probable scenarios." The system must prioritize credibility, precision, and defensibility over volume of insights.
 
-### Dual-Channel Tracking
-- Contacts can have email, LinkedIn, or both — tracked via `email_sent` and `linkedin_sent` columns in the Proof Sheet
-- Email sends are automated. LinkedIn is always manual.
+### Outreach Channels
+- Contacts can have email, LinkedIn, or both — both are stored in the Proof Sheet for use in outreach
+- Outreach (email and LinkedIn) is handled manually outside this system
 
 ### Playwright / LinkedIn Session
 - Used **only during lead discovery** (finding LinkedIn profile URLs via search)
@@ -155,9 +154,8 @@ Zero tolerance for assumptions, inferred logic, or "probable scenarios." The sys
 6 tools:
 - `search_web(query)` — Tavily web search
 - `enrich_contact(firstName, lastName, domain)` — Hunter email finder, returns email or null
-- `send_email(to, subject, body)` — Gmail SMTP send
 - `read_proof_sheet(spreadsheetId, tabName?)` — Read rows from any tab (default: "Proof Sheet")
-- `write_proof_sheet(spreadsheetId, rows[], tabName?)` — Append rows to any tab. Auto-creates tab and headers. 15 fields: company, institutional_backer, fund_experience, classification, why_them, key_contact, contact_linkedin, contact_email, contact_rationale, contact_confidence, message, email_subject, linkedin_note, email_sent, linkedin_sent
+- `write_proof_sheet(spreadsheetId, rows[], tabName?)` — Append rows to any tab. Auto-creates tab and headers. 10 fields: company, institutional_backer, fund_experience, classification, why_them, key_contact, contact_linkedin, contact_email, contact_rationale, contact_confidence
 - `update_proof_sheet(spreadsheetId, updates[], tabName?)` — Update existing rows by company name
 
 ### Environment Variables (MCP Server)
@@ -169,8 +167,8 @@ Zero tolerance for assumptions, inferred logic, or "probable scenarios." The sys
 ### Google Sheets Data Model
 All data lives in spreadsheet `1VjCQBw86I8vTTbqyJ8EyJI4XnbaZbnge2ihGsDud2uI`, shared with `firebase-adminsdk-fbsvc@thepfi.iam.gserviceaccount.com`.
 
-- **"Proof Sheet" tab** — `company, institutional_backer, fund_experience, classification, why_them, key_contact, contact_linkedin, contact_email, contact_rationale, contact_confidence, message, email_subject, linkedin_note, email_sent, linkedin_sent`
-- **"Learning Track" tab** — `name, company, role, related_project, related_friction, linkedin, email, channel, message, email_subject, linkedin_note, email_sent, linkedin_sent`
+- **"Proof Sheet" tab** — `company, institutional_backer, fund_experience, classification, why_them, key_contact, contact_linkedin, contact_email, contact_rationale, contact_confidence`
+- **"Learning Track" tab** — `name, company, role, related_project, related_friction, linkedin, email, channel`
 
 ## Assets
 - Images live in `assets/`
