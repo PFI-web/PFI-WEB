@@ -86,7 +86,7 @@ Targets ground-level operators who live inside permitting friction every day but
 
 5. **Verify via Playwright** — same LinkedIn verification as the Outreach Track. Name, employer, current status must all check out. Confirm they work on energy/infrastructure permitting specifically, not unrelated practice areas.
 
-6. **Enrich contacts** — LinkedIn via Playwright (required), email via Hunter (LinkedIn-only is acceptable and expected for smaller firms). Set `channel`: `'email'` if Hunter returns an email, `'linkedin'` if not.
+6. **Enrich contacts** — LinkedIn via Playwright (required), email via Apollo (LinkedIn-only is acceptable and expected for smaller firms). Set `channel`: `'email'` if Apollo returns an email, `'linkedin'` if not.
 
 7. **Write rows to the "Learning Track" tab** via `write_proof_sheet`. Check existing rows first via `read_proof_sheet` to skip duplicates (dedup by LinkedIn URL). Each row has these columns:
 
@@ -98,8 +98,8 @@ Targets ground-level operators who live inside permitting friction every day but
    | related_project | Project name + developer that surfaced them |
    | related_friction | Specific permitting issue identified |
    | linkedin | Full LinkedIn URL |
-   | email | Email if found via Hunter, otherwise blank |
-   | channel | `email` if Hunter found an email, `linkedin` if not |
+   | email | Email if found via Apollo, otherwise blank |
+   | channel | `email` if Apollo found an email, `linkedin` if not |
    | message | Leave blank — filled by writeLearningMessages |
 
 

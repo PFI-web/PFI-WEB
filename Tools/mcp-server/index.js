@@ -70,26 +70,29 @@ server.tool(
 // ===== enrich_contact =====
 server.tool(
     'enrich_contact',
-    'Find an email address using Hunter.io Email Finder. Pass first name, last name, and company domain to discover their email.',
+    'Find an email address using Apollo.io People Match. Pass first name, last name, and company domain to discover their email.',
     {
         firstName: z.string().describe('First name of the person'),
         lastName: z.string().describe('Last name of the person'),
         domain: z.string().describe('Company domain (e.g. swca.com)')
     },
     async ({ firstName, lastName, domain }) => {
-        const apiKey = process.env.HUNTER_API_KEY;
-        if (!apiKey) return textResult('ERROR: HUNTER_API_KEY not set.');
-        const url = `https://api.hunter.io/v2/email-finder?domain=${encodeURIComponent(domain)}&first_name=${encodeURIComponent(firstName)}&last_name=${encodeURIComponent(lastName)}&api_key=${apiKey}`;
-        const res = await fetch(url);
-        if (!res.ok) return textResult(JSON.stringify({ email: null, source: 'hunter', error: res.status }));
+        const apiKey = process.env.APOLLO_API_KEY;
+        if (!apiKey) return textResult('ERROR: APOLLO_API_KEY not set.');
+        const res = await fetch('https://api.apollo.io/v1/people/match', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+            body: JSON.stringify({ first_name: firstName, last_name: lastName, domain })
+        });
+        if (!res.ok) return textResult(JSON.stringify({ email: null, source: 'apollo', error: res.status }));
         const data = await res.json();
-        const result = data.data || {};
+        const person = data.person || {};
         return textResult(JSON.stringify({
-            email: result.email || null,
-            score: result.score || 0,
-            position: result.position || null,
-            company: result.company || null,
-            source: 'hunter'
+            email: person.email || null,
+            title: person.title || null,
+            linkedin_url: person.linkedin_url || null,
+            company: person.organization?.name || null,
+            source: 'apollo'
         }));
     }
 );
