@@ -109,8 +109,13 @@ server.tool(
     async ({ to, subject, body }) => {
         const transport = getMailTransport();
         if (!transport) return textResult('ERROR: Gmail not configured. Set GMAIL_USER and GMAIL_APP_PASSWORD.');
+        // Defensive: if the body starts with a "Subject: ..." line (because the
+        // sheet cell stores subject + body together for visual purposes), strip
+        // it so it doesn't appear inside the sent message.
+        const cleanedBody = body.replace(/^\s*Subject:.*(?:\r?\n){1,2}/i, '');
+        const signature = '\n\n--\nGabriel Cepeda | Managing Director\ngc@permitfriction.com | www.permitfriction.com';
         try {
-            await transport.sendMail({ from: process.env.GMAIL_USER, to, subject, text: body });
+            await transport.sendMail({ from: process.env.GMAIL_USER, to, subject, text: cleanedBody + signature });
             return textResult(`Email sent to ${to}.`);
         } catch (err) {
             return textResult(`ERROR sending email: ${err.message}`);
@@ -134,7 +139,9 @@ function schemaForTab(tabName) {
     return { headers: PROOF_HEADERS, fields: PROOF_FIELDS, endCol: 'O' };
 }
 
-// Set cells to CLIP wrapping so rows stay uniform height
+// Normalize row formatting: CLIP wrapping (uniform row height),
+// black text, left-aligned, top-aligned. Applied after every write/update
+// so we never inherit stale white-on-white text or center alignment.
 async function clipCells(sheets, spreadsheetId, tabName, sheetRow, startCol, endColIdx) {
     const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties(sheetId,title)' });
     const sheet = spreadsheet.data.sheets.find(s => s.properties.title === tabName);
@@ -151,8 +158,18 @@ async function clipCells(sheets, spreadsheetId, tabName, sheetRow, startCol, end
                         startColumnIndex: startCol,
                         endColumnIndex: endColIdx
                     },
-                    cell: { userEnteredFormat: { wrapStrategy: 'CLIP' } },
-                    fields: 'userEnteredFormat.wrapStrategy'
+                    cell: {
+                        userEnteredFormat: {
+                            wrapStrategy: 'CLIP',
+                            horizontalAlignment: 'LEFT',
+                            verticalAlignment: 'TOP',
+                            textFormat: {
+                                foregroundColor: { red: 0, green: 0, blue: 0 },
+                                bold: false
+                            }
+                        }
+                    },
+                    fields: 'userEnteredFormat(wrapStrategy,horizontalAlignment,verticalAlignment,textFormat.foregroundColor,textFormat.bold)'
                 }
             }]
         }
@@ -228,13 +245,27 @@ server.tool(
             for (const row of rows) {
                 values.push(fields.map(f => row[f] || ''));
             }
-            await sheets.spreadsheets.values.append({
+            const appendResp = await sheets.spreadsheets.values.append({
                 spreadsheetId,
                 range: `'${tabName}'!A1`,
                 valueInputOption: 'USER_ENTERED',
                 insertDataOption: 'INSERT_ROWS',
                 requestBody: { values }
             });
+            // Normalize formatting on the newly appended rows so they
+            // don't inherit stale white/centered formatting from the sheet.
+            const updatedRange = appendResp.data.updates?.updatedRange; // e.g. "'Proof Sheet'!A42:O44"
+            if (updatedRange) {
+                const m = updatedRange.match(/!([A-Z]+)(\d+):([A-Z]+)(\d+)$/);
+                if (m) {
+                    const firstRow = parseInt(m[2], 10);
+                    const lastRow = parseInt(m[4], 10);
+                    const endColIdx = fields.length;
+                    for (let r = firstRow; r <= lastRow; r++) {
+                        await clipCells(sheets, spreadsheetId, tabName, r, 0, endColIdx);
+                    }
+                }
+            }
             return textResult(`Wrote ${rows.length} rows to "${tabName}" tab.`);
         } catch (err) {
             return textResult(`ERROR writing to Google Sheet: ${err.message}`);
@@ -245,7 +276,7 @@ server.tool(
 // ===== update_proof_sheet =====
 server.tool(
     'update_proof_sheet',
-    'Update existing rows in a Google Sheet tab by matching on the first column (company for Proof Sheet, name for Learning Track). Pass tabName to target a specific tab (defaults to "Proof Sheet"). Overwrites only the fields you provide.',
+    'Update existing rows in a Google Sheet tab by matching on the first column (company for Proof Sheet, name for Learning Track). Pass tabName to target a specific tab (defaults to "Proof Sheet"). When multiple rows share the same first-column value (e.g. duplicate company rows with different contacts), include key_contact in the update payload to disambiguate — it is used as a secondary match AND written through. Overwrites only the fields you provide.',
     {
         spreadsheetId: z.string().describe('Google Sheet ID (from the URL)'),
         tabName: z.string().optional().describe('Tab name to update (default: "Proof Sheet")'),
@@ -264,13 +295,25 @@ server.tool(
                 return textResult(`ERROR: No data rows found in "${tabName}".`);
             }
             const allRows = result.data.values;
+            const keyContactColIdx = fields.indexOf('key_contact');
             let updatedCount = 0;
             const notFound = [];
             for (const update of updates) {
                 const matchValue = update[matchKey];
                 if (!matchValue) { notFound.push('(missing match key)'); continue; }
-                const rowIndex = allRows.findIndex((row, i) => i > 0 && row[0] && row[0].trim().toLowerCase() === matchValue.trim().toLowerCase());
-                if (rowIndex === -1) { notFound.push(matchValue); continue; }
+                const secondaryKeyContact = update.key_contact && keyContactColIdx !== -1
+                    ? update.key_contact.trim().toLowerCase()
+                    : null;
+                const rowIndex = allRows.findIndex((row, i) => {
+                    if (i === 0) return false;
+                    if (!row[0] || row[0].trim().toLowerCase() !== matchValue.trim().toLowerCase()) return false;
+                    if (secondaryKeyContact !== null) {
+                        const rowKc = (row[keyContactColIdx] || '').trim().toLowerCase();
+                        return rowKc === secondaryKeyContact;
+                    }
+                    return true;
+                });
+                if (rowIndex === -1) { notFound.push(matchValue + (secondaryKeyContact ? ` / ${update.key_contact}` : '')); continue; }
                 const existingRow = allRows[rowIndex];
                 const newRow = fields.map((field, colIdx) => {
                     if (field === matchKey) return existingRow[colIdx] || '';

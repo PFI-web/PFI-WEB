@@ -2,18 +2,11 @@
 cd /Users/alexpozo/development/PFI && npx serve .
 
 # Outreach Agent (Claude Code + MCP)
-cd ~/development/PFI && claude --dangerously-skip-permissions --mcp-config '{"mcpServers":{"pfi":{"command":"node","args":["Tools/mcp-server/index.js"],"env":{"TAVILY_API_KEY":"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","APOLLO_API_KEY":"MNRcmTi5ELGFNUT8efKlyA","GMAIL_USER":"ap@permitfriction.com","GMAIL_APP_PASSWORD":"kmwx wopw jhnf izpz"}}}}'
+cd ~/development/PFI && claude --dangerously-skip-permissions --mcp-config '{"mcpServers":{"pfi":{"command":"node","args":["Tools/mcp-server/index.js"],"env":{"TAVILY_API_KEY":"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","APOLLO_API_KEY":"MNRcmTi5ELGFNUT8efKlyA","GMAIL_USER":"Gc@permitfriction.com","GMAIL_APP_PASSWORD":"mfki dxrd glei pndc"}}}}'
 
 # First thing to run in the agent session
 /proof-sheet [count]
 /find-learning-contacts [count]
-
-fill in the missing cells in the Proof
-   Sheet tab of your Google Sheet, specifically:                
-                                                                
-  - contact_email for 30 rows that have a verified contact (name
-   + LinkedIn) but no email yet                                 
-  - key_contact, contact_linkedin, contact_email,               
-  contact_rationale, contact_confidence for 241 rows that have  
-  no contact info at all (200 marked "contact not found" + 41
-  with blank contact fields)          
+/write-messages [count] → draft emails into existing rows                
+/perform-outreach → actually send
+        
