@@ -1,0 +1,11 @@
+{
+  "name": "we-the-best-shop-tooling",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone Node scripts for cleaning/reporting the WE THE BEST shop ledger Google Sheet",
+  "dependencies": {
+    "googleapis": "^171.4.0"
+  },
+  "comment": "node_modules is symlinked to ../mcp-server/node_modules to share the existing install. To make standalone, remove the symlink and run `npm install`."
+}

@@ -7,6 +7,31 @@ cd ~/development/PFI && claude --dangerously-skip-permissions --mcp-config '{"mc
 # First thing to run in the agent session
 /proof-sheet [count]
 /find-learning-contacts [count]
-/write-messages [count] → draft emails into existing rows                
+/write-messages [count] → draft emails into existing rows             
 /perform-outreach → actually send
-        
+
+ First, read Tools/uds-backup/README.md — it explains the UDS research project,
+  what we've established, the MCP server bug we patched, and the immediate task.
+
+  Then do exactly what section 7 of that README describes:
+  1. Read Tools/uds-backup/uds-delivery-map.json
+  2. Read Tools/uds-backup/uds-customers.json
+  3. Read Tools/uds-backup/uds-service-radius.json
+  4. Write each one to the Proof Sheet spreadsheet
+     (ID: 1VjCQBw86I8vTTbqyJ8EyJI4XnbaZbnge2ihGsDud2uI)
+     into tabs "UDS Delivery Map", "UDS Customers", "UDS Service Radius"
+     respectively, using write_proof_sheet.
+  5. Read each tab back and confirm row counts: 18, 16, 54.
+  6. Report whether all three tabs landed clean.
+
+  The README at Tools/uds-backup/README.md covers:
+  - §1 What we're trying to figure out (the big picture)
+  - §2 What UDS is
+  - §3 What we've established (facility map, two pickup models, customers, radius
+  math, hospital lists)
+  - §4 The three JSON files and their schemas
+  - §5 Current state of the Google Sheet
+  - §6 The MCP server bug + the patch
+  - §7 The immediate task to execute
+  - §8 Further work the user may want next
+  - §9 Important user-memory constraints (em-dash rule, duplicate rows, PFI framing)

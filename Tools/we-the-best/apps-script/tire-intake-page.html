@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root {
+      --wa-green:#008069; --wa-green-dark:#006b58;
+      --chat-bg:#efeae2; --in-bubble:#ffffff; --out-bubble:#d9fdd3;
+      --txt:#111b21; --meta:#667781; --tick:#53bdeb; --footer:#f0f2f5;
+    }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html, body { margin:0; height:100%; width:100%; max-width:100%; overflow-x:hidden; }
+    body {
+      display:flex; flex-direction:column;
+      height:100vh; height:100dvh; width:100%; max-width:100%;
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      color:var(--txt); background:var(--chat-bg);
+    }
+
+    /* ---- top bar ---- */
+    header {
+      flex:0 0 auto; display:flex; align-items:center; gap:10px;
+      background:var(--wa-green); color:#fff;
+      padding:8px 10px; padding-top:calc(8px + env(safe-area-inset-top));
+    }
+    .back { font-size:24px; line-height:1; opacity:.95; }
+    .avatar {
+      width:40px; height:40px; border-radius:50%; flex:0 0 auto;
+      background:#ffffff33; display:flex; align-items:center; justify-content:center;
+      font-size:22px;
+    }
+    .who { flex:1 1 auto; min-width:0; line-height:1.2; }
+    .who .name, .who .status { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .who .name { font-size:16px; font-weight:600; }
+    .who .status { font-size:12.5px; color:#d9fdd3; opacity:.9; }
+    .actions { display:flex; gap:16px; font-size:19px; opacity:.95; padding-right:4px; flex:0 0 auto; }
+
+    /* ---- chat area + doodle wallpaper ---- */
+    #log {
+      flex:1 1 auto; overflow-y:auto; padding:12px 8px 8px;
+      display:flex; flex-direction:column; gap:3px;
+      background-color:var(--chat-bg);
+      background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'><g fill='none' stroke='%23d9cfc1' stroke-width='1.4' opacity='0.5'><circle cx='25' cy='30' r='7'/><path d='M70 18 l6 10 -12 0 z'/><path d='M104 40 q8 -10 16 0'/><path d='M18 95 h14 M25 88 v14'/><circle cx='112' cy='100' r='5'/><path d='M58 78 q10 8 0 16 q-10 -8 0 -16z'/><path d='M88 118 l5 5 m0 -5 l-5 5'/></g></svg>");
+      background-repeat:repeat;
+    }
+    .day {
+      align-self:center; background:#ffffffcc; color:#54656f; font-size:12px;
+      padding:5px 11px; border-radius:8px; margin:6px 0 8px; box-shadow:0 1px 0 #0001;
+    }
+
+    .row { display:flex; padding:0 4px; }
+    .row.me  { justify-content:flex-end; }
+    .row.bot { justify-content:flex-start; }
+
+    .bubble {
+      position:relative; max-width:84%; padding:9px 13px 10px;
+      border-radius:9px; font-size:18px; line-height:1.4;
+      word-wrap:break-word; overflow-wrap:anywhere; white-space:pre-wrap; box-shadow:0 1px .5px #0002;
+    }
+    .bot .bubble { background:var(--in-bubble); border-top-left-radius:0; }
+    .me  .bubble { background:var(--out-bubble); border-top-right-radius:0; }
+    .err .bubble { background:#fff0f0; border-top-left-radius:0; color:#b00020; }
+
+    /* little tails */
+    .bot .bubble::before, .err .bubble::before {
+      content:""; position:absolute; top:0; left:-7px;
+      border:7px solid transparent; border-top-color:var(--in-bubble); border-right:0;
+    }
+    .err .bubble::before { border-top-color:#fff0f0; }
+    .me .bubble::before {
+      content:""; position:absolute; top:0; right:-7px;
+      border:7px solid transparent; border-top-color:var(--out-bubble); border-left:0;
+    }
+
+    .meta {
+      float:right; margin:6px 0 -2px 8px; font-size:11px; color:var(--meta);
+      display:inline-flex; align-items:center; gap:3px; white-space:nowrap;
+    }
+    .meta svg { display:block; }
+
+    /* typing dots bubble */
+    .typing .bubble { padding:10px 12px; }
+    .dots { display:inline-flex; gap:4px; }
+    .dots i { width:7px; height:7px; border-radius:50%; background:#9aa6ad; animation:blink 1.2s infinite; }
+    .dots i:nth-child(2){ animation-delay:.2s; } .dots i:nth-child(3){ animation-delay:.4s; }
+    @keyframes blink { 0%,60%,100%{opacity:.3;} 30%{opacity:1;} }
+
+    /* ---- input bar ---- */
+    footer {
+      flex:0 0 auto; display:flex; align-items:flex-end; gap:7px;
+      background:var(--footer); padding:7px 8px;
+      padding-bottom:calc(7px + env(safe-area-inset-bottom));
+    }
+    .inpwrap {
+      flex:1 1 auto; min-width:0; display:flex; align-items:center; gap:9px;
+      background:#fff; border-radius:26px; padding:13px 16px; box-shadow:0 1px .5px #0001;
+    }
+    .inpwrap .ico { font-size:21px; color:#54656f; flex:0 0 auto; }
+    #txt {
+      flex:1 1 auto; border:none; outline:none; font-size:18px; background:transparent;
+      color:var(--txt); min-width:0;
+    }
+    #send {
+      flex:0 0 auto; width:54px; height:54px; border:none; border-radius:50%;
+      background:var(--wa-green); color:#fff; cursor:pointer;
+      display:flex; align-items:center; justify-content:center;
+    }
+    #send:active { background:var(--wa-green-dark); }
+    #send svg { width:25px; height:25px; fill:#fff; }
+
+    /* narrow phones: keep it all on-screen, no sideways scroll */
+    @media (max-width:360px) {
+      .bubble { font-size:16.5px; max-width:88%; }
+      #txt { font-size:16px; }
+      .inpwrap { padding:11px 13px; gap:7px; }
+      .inpwrap .ico { font-size:19px; }
+      #send { width:48px; height:48px; }
+      #send svg { width:22px; height:22px; }
+      .actions { gap:13px; font-size:18px; }
+      footer { gap:6px; padding:7px 7px; padding-bottom:calc(7px + env(safe-area-inset-bottom)); }
+    }
+
+    /* undone entry */
+    .me.undone .t { text-decoration:line-through; opacity:.55; }
+    .me.undone .bubble { opacity:.85; }
+    .undone-tag { font-size:11px; color:var(--meta); font-style:italic; }
+    .me .bubble.held { box-shadow:0 0 0 2px var(--wa-green); }
+
+    /* confirm popup */
+    .modal-back {
+      position:fixed; inset:0; background:#0006; display:flex;
+      align-items:center; justify-content:center; padding:24px; z-index:10;
+    }
+    .modal-back[hidden] { display:none; }
+    .modal {
+      background:#fff; border-radius:14px; max-width:340px; width:100%;
+      padding:20px 20px 8px; box-shadow:0 8px 30px #0004;
+    }
+    .modal .m-title { font-size:17px; font-weight:600; margin-bottom:8px; }
+    .modal .m-body { font-size:14.5px; color:#3b4a54; line-height:1.4; }
+    .modal .m-btns { display:flex; justify-content:flex-end; gap:6px; margin-top:14px; }
+    .modal .m-btns button {
+      border:none; background:none; color:var(--wa-green); font-size:15px; font-weight:600;
+      padding:10px 14px; border-radius:8px; cursor:pointer;
+    }
+    .modal .m-btns button:active { background:#0000000d; }
+  </style>
+</head>
+<body>
+  <header>
+    <span class="back">&#8249;</span>
+    <div class="avatar">🛞</div>
+    <div class="who">
+      <div class="name">Entrada de llantas</div>
+      <div class="status" id="status">en línea</div>
+    </div>
+    <div class="actions"><span>📹</span><span>📞</span><span>&#8942;</span></div>
+  </header>
+
+  <div id="log">
+    <div class="day">Hoy</div>
+    <div class="row bot"><div class="bubble">Mándame una medida de llanta y la agrego al inventario.
+Como <b>225 45 17</b> — o <b>4 225 45 17</b> para cuatro.
+¿Te equivocaste? <b>Mantén presionada</b> una medida enviada para deshacerla.<span class="meta" id="greetmeta"></span></div></div>
+  </div>
+
+  <footer>
+    <div class="inpwrap">
+      <span class="ico">😊</span>
+      <input id="txt" type="text" inputmode="text" autocomplete="off" autocapitalize="off"
+             autocorrect="off" spellcheck="false" placeholder="Escribe una medida" enterkeyhint="send">
+      <span class="ico">📎</span>
+      <span class="ico">📷</span>
+    </div>
+    <button id="send" aria-label="Enviar">
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
+  </footer>
+
+  <div class="modal-back" id="modal" hidden>
+    <div class="modal">
+      <div class="m-title">¿Deshacer esta entrada?</div>
+      <div class="m-body" id="m-body"></div>
+      <div class="m-btns">
+        <button id="m-cancel">Cancelar</button>
+        <button id="m-ok">Deshacer</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var log = document.getElementById('log');
+    var txt = document.getElementById('txt');
+    var send = document.getElementById('send');
+    var statusEl = document.getElementById('status');
+
+    function clock() {
+      var d = new Date(), h = d.getHours(), m = d.getMinutes(), ap = h < 12 ? 'AM' : 'PM';
+      h = h % 12 || 12;
+      return h + ':' + (m < 10 ? '0' : '') + m + ' ' + ap;
+    }
+    var TICKS = '<svg width="16" height="11" viewBox="0 0 18 12"><path fill="#53bdeb" d="M17.4 1.3a.5.5 0 0 0-.7-.1l-7.9 9.2-.1.1-2.9-2.8a.5.5 0 0 0-.7.7l3.4 3.3a.5.5 0 0 0 .7-.1l8.4-9.6a.5.5 0 0 0-.1-.7zm-4.9 0a.5.5 0 0 0-.7-.1L4 10.3l-.1.1-.4-.4a.5.5 0 1 0-.7.7l1 .9a.5.5 0 0 0 .7-.1l8.1-9.4a.5.5 0 0 0-.1-.7z"/></svg>';
+
+    document.getElementById('greetmeta').innerHTML = clock();
+
+    function bubble(html, cls, withTicks) {
+      var row = document.createElement('div');
+      row.className = 'row ' + cls;
+      var b = document.createElement('div');
+      b.className = 'bubble';
+      b.innerHTML = '<span class="t">' + html + '</span>' +
+        '<span class="meta">' + clock() + (withTicks ? TICKS : '') + '</span>';
+      row.appendChild(b);
+      log.appendChild(row);
+      log.scrollTop = log.scrollHeight;
+      return row;
+    }
+    function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { '&':'&amp;','<':'&lt;','>':'&gt;' }[c]; }); }
+
+    // ---- press-and-hold to undo ----
+    var modal = document.getElementById('modal');
+    var mBody = document.getElementById('m-body');
+    var mOk = document.getElementById('m-ok');
+    var mCancel = document.getElementById('m-cancel');
+    var pendingUndo = null; // { row, size, qty }
+
+    function makeUndoable(row, size, qty) {
+      row.dataset.size = size;
+      row.dataset.qty = qty;
+      var bub = row.querySelector('.bubble');
+      var timer = null;
+      var fire = function () {
+        if (row.dataset.undone) return;
+        bub.classList.add('held');
+        openUndo(row, size, qty);
+      };
+      var clear = function () { if (timer) { clearTimeout(timer); timer = null; } bub.classList.remove('held'); };
+      bub.addEventListener('touchstart', function () { clear(); timer = setTimeout(fire, 500); }, { passive: true });
+      bub.addEventListener('touchmove', clear, { passive: true });
+      bub.addEventListener('touchend', clear);
+      bub.addEventListener('touchcancel', clear);
+      bub.addEventListener('contextmenu', function (e) { e.preventDefault(); fire(); }); // desktop right-click
+      bub.addEventListener('mousedown', function (e) { if (e.button === 0) { clear(); timer = setTimeout(fire, 500); } });
+      bub.addEventListener('mouseup', clear);
+      bub.addEventListener('mouseleave', clear);
+    }
+
+    function openUndo(row, size, qty) {
+      pendingUndo = { row: row, size: size, qty: qty };
+      var times = (+qty === 1) ? '' : (qty + ' × ');
+      mBody.textContent = 'Quitar ' + times + size + ' del inventario.';
+      modal.hidden = false;
+    }
+    function closeUndo() {
+      modal.hidden = true;
+      if (pendingUndo) pendingUndo.row.querySelector('.bubble').classList.remove('held');
+      pendingUndo = null;
+    }
+
+    mCancel.addEventListener('click', closeUndo);
+    modal.addEventListener('click', function (e) { if (e.target === modal) closeUndo(); });
+    mOk.addEventListener('click', function () {
+      if (!pendingUndo) return;
+      var u = pendingUndo;
+      modal.hidden = true;
+      mOk.disabled = true;
+      google.script.run
+        .withSuccessHandler(function (res) {
+          mOk.disabled = false;
+          if (res.ok) {
+            u.row.classList.add('undone');
+            u.row.dataset.undone = '1';
+            var meta = u.row.querySelector('.meta');
+            if (meta && !u.row.querySelector('.undone-tag')) {
+              var tag = document.createElement('span');
+              tag.className = 'undone-tag';
+              tag.textContent = ' · deshecho';
+              meta.insertBefore(tag, meta.firstChild);
+            }
+          }
+          u.row.querySelector('.bubble').classList.remove('held');
+          bubble(esc(res.message), res.ok ? 'bot' : 'err', false);
+        })
+        .withFailureHandler(function () {
+          mOk.disabled = false;
+          u.row.querySelector('.bubble').classList.remove('held');
+          bubble('no se pudo deshacer, intenta otra vez', 'err', false);
+        })
+        .undoTire(u.size, u.qty);
+      pendingUndo = null;
+    });
+
+    function submit() {
+      var raw = txt.value.trim();
+      if (!raw) return;
+      var myRow = bubble(esc(raw), 'me', true);
+      txt.value = '';
+      txt.focus();
+      send.disabled = true;
+      statusEl.textContent = 'escribiendo…';
+
+      var typing = document.createElement('div');
+      typing.className = 'row bot typing';
+      typing.innerHTML = '<div class="bubble"><span class="dots"><i></i><i></i><i></i></span></div>';
+      log.appendChild(typing);
+      log.scrollTop = log.scrollHeight;
+
+      function done() { statusEl.textContent = 'en línea'; send.disabled = false; log.removeChild(typing); }
+
+      google.script.run
+        .withSuccessHandler(function (res) { done(); bubble(esc(res.message), res.ok ? 'bot' : 'err', false); if (res.ok) makeUndoable(myRow, res.size, res.qty); })
+        .withFailureHandler(function () { done(); bubble('algo salió mal, intenta otra vez', 'err', false); })
+        .receiveTire(raw);
+    }
+
+    send.addEventListener('click', submit);
+    txt.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+
+    // Keep the input bar above the on-screen keyboard and the chat pinned to the latest line.
+    // visualViewport shrinks when the keyboard opens; match the body to it so nothing is hidden.
+    function toBottom() { log.scrollTop = log.scrollHeight; }
+    if (window.visualViewport) {
+      var vv = window.visualViewport;
+      var fit = function () { document.body.style.height = vv.height + 'px'; toBottom(); };
+      vv.addEventListener('resize', fit);
+      vv.addEventListener('scroll', fit);
+      fit();
+    }
+    txt.addEventListener('focus', function () { setTimeout(toBottom, 300); });
+    window.addEventListener('load', function () { txt.focus(); toBottom(); });
+  </script>
+</body>
+</html>

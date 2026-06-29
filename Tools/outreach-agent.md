@@ -62,7 +62,7 @@ Always start with **Tier 1** sources — primary truth sources from regulatory d
 ## Task Handlers
 
 ### proofSheet
-**Purpose:** This sheet is the foundation for highly targeted outreach. Every row is a structured intelligence brief on a project with permitting friction — the deeper and more specific the research, the more actionable the row. A precise row — with the project name, the agency stage, the timeline gap, and why this person specifically cares — is what makes outreach feel internally informed rather than generic.
+**Purpose:** This sheet is the foundation for highly targeted outreach. Every row is a structured intelligence brief on a project with permitting friction — the deeper and more specific the research, the more actionable the row. A precise row — with the project name, the agency stage, the timeline gap, and why this person specifically cares — is what makes outreach feel internally informed rather than generic. 
 
 Every row should read like an internal briefing, not a search summary. The task includes a `spreadsheetId` and `count` field.
 

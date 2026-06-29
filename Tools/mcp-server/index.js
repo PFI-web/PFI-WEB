@@ -139,6 +139,75 @@ function schemaForTab(tabName) {
     return { headers: PROOF_HEADERS, fields: PROOF_FIELDS, endCol: 'O' };
 }
 
+// Convert snake_case field name to "Title Case" display header.
+function snakeToTitle(s) {
+    return s.split('_').map(w => w ? w.charAt(0).toUpperCase() + w.slice(1) : w).join(' ');
+}
+
+// Convert arbitrary "Display Header" string to snake_case field name.
+function titleToSnake(s) {
+    return (s || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+// Return spreadsheet column letter for the Nth column (1 -> A, 27 -> AA).
+function columnLetter(n) {
+    let s = '';
+    while (n > 0) {
+        const m = (n - 1) % 26;
+        s = String.fromCharCode(65 + m) + s;
+        n = Math.floor((n - 1) / 26);
+    }
+    return s || 'A';
+}
+
+// Resolve the schema for any tab name.
+//  - Proof Sheet / Learning Track: hardcoded as before.
+//  - Unknown tab with sampleRow (write path): derive headers/fields from
+//    the keys of sampleRow.
+//  - Unknown tab without sampleRow (read/update path): pull headers from
+//    row 1 of the existing tab in the sheet.
+// Returns { headers, fields, endCol } or null if no schema can be resolved.
+async function resolveSchema(sheets, spreadsheetId, tabName, sampleRow = null) {
+    if (tabName === LEARNING_TRACK_TAB || tabName === PROOF_TAB) {
+        return schemaForTab(tabName);
+    }
+    // Try to read existing header row from the tab.
+    let existingHeaders = null;
+    try {
+        const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties.title' });
+        const existingTabs = new Set(spreadsheet.data.sheets.map(s => s.properties.title));
+        if (existingTabs.has(tabName)) {
+            const headerResult = await sheets.spreadsheets.values.get({
+                spreadsheetId,
+                range: `'${tabName}'!1:1`
+            }).catch(() => null);
+            const row = headerResult?.data?.values?.[0];
+            if (row && row.length > 0 && row.some(c => c && c.trim() !== '')) {
+                existingHeaders = row.map(c => (c || '').trim());
+            }
+        }
+    } catch (_) { /* ignore, fall through */ }
+
+    if (sampleRow && Object.keys(sampleRow).length > 0) {
+        const fields = Object.keys(sampleRow);
+        const headers = fields.map(snakeToTitle);
+        const endCol = columnLetter(fields.length);
+        const existingFields = existingHeaders ? existingHeaders.map(titleToSnake) : null;
+        const mismatch = existingFields && (
+            existingFields.length !== fields.length ||
+            existingFields.some((f, i) => f !== fields[i])
+        );
+        return { headers, fields, endCol, existingHeaders, mismatch: !!mismatch };
+    }
+    if (existingHeaders) {
+        const headers = existingHeaders;
+        const fields = headers.map(titleToSnake);
+        const endCol = columnLetter(fields.length);
+        return { headers, fields, endCol };
+    }
+    return null;
+}
+
 // Normalize row formatting: CLIP wrapping (uniform row height),
 // black text, left-aligned, top-aligned. Applied after every write/update
 // so we never inherit stale white-on-white text or center alignment.
@@ -186,13 +255,17 @@ server.tool(
     },
     async ({ spreadsheetId, tabName = PROOF_TAB }) => {
         try {
-            const { fields, endCol } = schemaForTab(tabName);
             const sheets = getSheetsClient();
             const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties.title' });
             const existingTabs = new Set(spreadsheet.data.sheets.map(s => s.properties.title));
             if (!existingTabs.has(tabName)) {
                 return textResult(JSON.stringify({ rows: [], message: `No "${tabName}" tab found. Sheet is empty.` }));
             }
+            const schema = await resolveSchema(sheets, spreadsheetId, tabName);
+            if (!schema) {
+                return textResult(JSON.stringify({ rows: [], message: `"${tabName}" tab exists but has no header row.` }));
+            }
+            const { fields, endCol } = schema;
             const result = await sheets.spreadsheets.values.get({
                 spreadsheetId,
                 range: `'${tabName}'!A:${endCol}`
@@ -224,7 +297,6 @@ server.tool(
     },
     async ({ spreadsheetId, tabName = PROOF_TAB, rows }) => {
         try {
-            const { headers, fields, endCol } = schemaForTab(tabName);
             const sheets = getSheetsClient();
             const spreadsheet = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties.title' });
             const existingTabs = new Set(spreadsheet.data.sheets.map(s => s.properties.title));
@@ -234,16 +306,43 @@ server.tool(
                     requestBody: { requests: [{ addSheet: { properties: { title: tabName } } }] }
                 });
             }
+            const schema = await resolveSchema(sheets, spreadsheetId, tabName, rows[0] || null);
+            if (!schema) {
+                return textResult(`ERROR: cannot resolve schema for "${tabName}" (no rows passed and no existing headers).`);
+            }
+            const { headers, fields, endCol, mismatch } = schema;
+            // For unknown tabs where existing headers don't match the new row keys,
+            // overwrite the header row so columns line up with the data we are about
+            // to append. Known tabs (Proof Sheet / Learning Track) keep their headers.
+            const isKnown = tabName === PROOF_TAB || tabName === LEARNING_TRACK_TAB;
             const existing = await sheets.spreadsheets.values.get({
                 spreadsheetId,
                 range: `'${tabName}'!A1:${endCol}1`
             }).catch(() => null);
-            const values = [];
-            if (!existing || !existing.data.values || existing.data.values.length === 0) {
-                values.push(headers);
+            const haveExistingHeaders = !!(existing && existing.data.values && existing.data.values.length > 0);
+            if (!isKnown && (mismatch || !haveExistingHeaders)) {
+                // Clear row 1 (covers cases where old headers are wider than new) then write new headers.
+                await sheets.spreadsheets.values.clear({
+                    spreadsheetId,
+                    range: `'${tabName}'!1:1`
+                }).catch(() => null);
+                await sheets.spreadsheets.values.update({
+                    spreadsheetId,
+                    range: `'${tabName}'!A1`,
+                    valueInputOption: 'USER_ENTERED',
+                    requestBody: { values: [headers] }
+                });
+            } else if (isKnown && !haveExistingHeaders) {
+                await sheets.spreadsheets.values.update({
+                    spreadsheetId,
+                    range: `'${tabName}'!A1`,
+                    valueInputOption: 'USER_ENTERED',
+                    requestBody: { values: [headers] }
+                });
             }
+            const values = [];
             for (const row of rows) {
-                values.push(fields.map(f => row[f] || ''));
+                values.push(fields.map(f => row[f] !== undefined ? row[f] : ''));
             }
             const appendResp = await sheets.spreadsheets.values.append({
                 spreadsheetId,
@@ -284,9 +383,13 @@ server.tool(
     },
     async ({ spreadsheetId, tabName = PROOF_TAB, updates }) => {
         try {
-            const { fields, endCol } = schemaForTab(tabName);
-            const matchKey = fields[0];
             const sheets = getSheetsClient();
+            const schema = await resolveSchema(sheets, spreadsheetId, tabName, updates[0] || null);
+            if (!schema) {
+                return textResult(`ERROR: cannot resolve schema for "${tabName}".`);
+            }
+            const { fields, endCol } = schema;
+            const matchKey = fields[0];
             const result = await sheets.spreadsheets.values.get({
                 spreadsheetId,
                 range: `'${tabName}'!A:${endCol}`
