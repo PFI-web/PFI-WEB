@@ -61,6 +61,31 @@ const sortedMonths = [...months.entries()].sort((a, b) => a[0] - b[0]).map(([, v
 for (const m of sortedMonths) m.sticker = m.inspN > 0 ? stickerRate(m.key) : 0;
 const totalSticker = sortedMonths.reduce((s, m) => s + m.sticker, 0);
 
+// ---- Fixed monthly overhead (owner-provided 2026-06-29) ----
+// Weekly pay normalized to monthly (× 52 ÷ 12, avg 4.33 wk/mo).
+const OVERHEAD = [
+  { name: "Tomas — pay", amount: 850, per: "week" },
+  { name: "Ana — pay", amount: 900, per: "week" },
+  { name: "Rent — building", amount: 3000, per: "month" },
+  { name: "Electric (light)", amount: 350, per: "month" },
+  { name: "Trash", amount: 140, per: "month" },
+  { name: "Gas (UGI)", amount: 150, per: "month" },
+  { name: "Internet", amount: 245, per: "month" },
+  { name: "OPUS (machine)", amount: 250, per: "month" },
+  { name: "Supplies (paper, toilet, etc.)", amount: 50, per: "month" },
+  { name: "OBD (machine)", amount: 230, per: "month" },
+  { name: "Westfield", amount: 90, per: "month" },
+  { name: "MCIRS (software)", amount: 40, per: "month" },
+];
+const toMonthly = (e) => (e.per === "week" ? (e.amount * 52) / 12 : e.amount);
+const r2c = (n) => Math.round(n * 100) / 100;
+const monthlyOH = OVERHEAD.reduce((s, e) => s + toMonthly(e), 0);
+// Owner: overhead "starts at Feb down" — applies from Feb 2026 onward to every real operating
+// month (one with mechanic/inspector activity). Skips the lone Jan 2025, anything before Feb 2026,
+// and the cost-only rollover months (Dec 2026 / Mar 2027, no mech/insp activity).
+const OH_START = 202602;
+const ohForMonth = (m) => (m.key >= OH_START && (m.p.Mechanic !== 0 || m.p.Inspector !== 0)) ? monthlyOH : 0;
+
 // ---- Build sheet values ---- (track row indices for formatting)
 const out = [];
 const titleRows = [], headerRows = [], totalRows = [], currencyRanges = [];
@@ -69,17 +94,19 @@ const push = (row) => out.push(row);
 titleRows.push(out.length);
 push(["MONTHLY PROFIT BY TYPE (net of inspection stickers)"]);
 headerRows.push(out.length);
-push(["Month", "Mechanic", "Inspector", "Stickers", "Expense", "Net Profit"]);
+push(["Month", "Mechanic", "Inspector", "Stickers", "Expense", "Net Profit", "Overhead", "Take-home"]);
 const t1Start = out.length;
-const t = { Mechanic: 0, Inspector: 0, Expense: 0, sticker: 0 };
+const t = { Mechanic: 0, Inspector: 0, Expense: 0, sticker: 0, oh: 0, take: 0 };
 for (const m of sortedMonths) {
   const net = m.p.Mechanic + m.p.Inspector - m.sticker + m.p.Expense;
-  t.Mechanic += m.p.Mechanic; t.Inspector += m.p.Inspector; t.Expense += m.p.Expense; t.sticker += m.sticker;
-  push([m.label, m.p.Mechanic, m.p.Inspector, m.sticker ? -m.sticker : 0, m.p.Expense, net]);
+  const oh = ohForMonth(m);
+  const take = net - oh;
+  t.Mechanic += m.p.Mechanic; t.Inspector += m.p.Inspector; t.Expense += m.p.Expense; t.sticker += m.sticker; t.oh += oh; t.take += take;
+  push([m.label, m.p.Mechanic, m.p.Inspector, m.sticker ? -m.sticker : 0, m.p.Expense, net, oh ? -oh : 0, r2c(take)]);
 }
 totalRows.push(out.length);
-push(["TOTAL", t.Mechanic, t.Inspector, -t.sticker, t.Expense, t.Mechanic + t.Inspector - t.sticker + t.Expense]);
-currencyRanges.push({ r0: t1Start, r1: out.length, c0: 1, c1: 6 }); // cols B-F
+push(["TOTAL", t.Mechanic, t.Inspector, -t.sticker, t.Expense, t.Mechanic + t.Inspector - t.sticker + t.Expense, -t.oh, r2c(t.take)]);
+currencyRanges.push({ r0: t1Start, r1: out.length, c0: 1, c1: 8 }); // cols B-H
 push([]);
 push([]);
 
@@ -101,8 +128,41 @@ push(["TOTAL", t2.rev, t2.cost, t2.profit, t2.n]);
 currencyRanges.push({ r0: t2Start, r1: out.length, c0: 1, c1: 4 }); // Revenue/Cost/Profit
 const inspNet = byType.Inspector.profit - totalSticker;
 const grandNet = t2.profit;
+
+// ---- Bottom line: take-home after fixed overhead (sits right under the TOTAL above) ----
+const ohMonths = sortedMonths.filter((m) => ohForMonth(m) > 0);
+const totalOH = ohMonths.length * monthlyOH;
+const takeHome = t2.profit - totalOH;
+push([]);
+titleRows.push(out.length);
+push(["BOTTOM LINE — TAKE-HOME AFTER OVERHEAD"]);
+const t4Start = out.length;
+push(["Net profit (all types)", r2c(t2.profit)]);
+push([`Fixed overhead (${ohMonths.length} mo × $${Math.round(monthlyOH).toLocaleString()}/mo, Feb 2026 on)`, -r2c(totalOH)]);
+totalRows.push(out.length);
+push(["TAKE-HOME after expenses", r2c(takeHome)]);
+currencyRanges.push({ r0: t4Start, r1: out.length, c0: 1, c1: 2 });
+
 push([]);
 push([`Note: Inspector cost = $${totalSticker.toLocaleString()} in inspection stickers (Nov 2025-May 2026 @ $1,205/mo, Jun 2026 @ $1,810/mo). Inspection jobs have no per-part cost.`]);
+push([]);
+push([]);
+
+// ---- Monthly operating expenses (fixed overhead) — itemized detail ----
+titleRows.push(out.length);
+push(["MONTHLY OPERATING EXPENSES (fixed overhead)"]);
+headerRows.push(out.length);
+push(["Expense", "Amount", "Per", "Monthly cost"]);
+const t3Start = out.length;
+for (const e of OVERHEAD) {
+  push([e.name, e.amount, e.per, r2c(toMonthly(e))]);
+}
+totalRows.push(out.length);
+push(["TOTAL / month", "", "", r2c(monthlyOH)]);
+currencyRanges.push({ r0: t3Start, r1: out.length, c0: 1, c1: 2 }); // Amount col (B)
+currencyRanges.push({ r0: t3Start, r1: out.length, c0: 3, c1: 4 }); // Monthly cost col (D)
+push([]);
+push([`Note: weekly pay (Tomas, Ana) converted to monthly × 52 ÷ 12 (avg 4.33 weeks/mo). Fixed overhead ≈ $${Math.round(monthlyOH).toLocaleString()}/month (≈ $${Math.round(monthlyOH * 12).toLocaleString()}/year). Applied to operating months from Feb 2026 on (see the Overhead / Take-home columns and the bottom line above).`]);
 
 // ---- Write tab ----
 const meta = await sheets.spreadsheets.get({ spreadsheetId: SHEET_ID, fields: "sheets.properties(sheetId,title,index)" });
@@ -113,7 +173,7 @@ let targetIdx = partsIdx + 1;
 if (existing && existing.properties.index <= partsIdx) targetIdx -= 1; // deleting an earlier Summary shifts indices down
 const reqs = [];
 if (existing) reqs.push({ deleteSheet: { sheetId: existing.properties.sheetId } });
-reqs.push({ addSheet: { properties: { title: OUT_TAB, index: targetIdx, gridProperties: { columnCount: 6 } } } });
+reqs.push({ addSheet: { properties: { title: OUT_TAB, index: targetIdx, gridProperties: { columnCount: 8 } } } });
 const add = await sheets.spreadsheets.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { requests: reqs } });
 const sid = add.data.replies.find((x) => x.addSheet).addSheet.properties.sheetId;
 
@@ -123,11 +183,11 @@ await sheets.spreadsheets.values.update({
 });
 
 const fmt = [
-  ...titleRows.map((rr) => ({ repeatCell: { range: { sheetId: sid, startRowIndex: rr, endRowIndex: rr + 1, startColumnIndex: 0, endColumnIndex: 6 }, cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 12 } } }, fields: "userEnteredFormat.textFormat" } })),
-  ...headerRows.map((rr) => ({ repeatCell: { range: { sheetId: sid, startRowIndex: rr, endRowIndex: rr + 1, startColumnIndex: 0, endColumnIndex: 6 }, cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.9, green: 0.9, blue: 0.9 } } }, fields: "userEnteredFormat(textFormat,backgroundColor)" } })),
-  ...totalRows.map((rr) => ({ repeatCell: { range: { sheetId: sid, startRowIndex: rr, endRowIndex: rr + 1, startColumnIndex: 0, endColumnIndex: 6 }, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: "userEnteredFormat.textFormat" } })),
+  ...titleRows.map((rr) => ({ repeatCell: { range: { sheetId: sid, startRowIndex: rr, endRowIndex: rr + 1, startColumnIndex: 0, endColumnIndex: 8 }, cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 12 } } }, fields: "userEnteredFormat.textFormat" } })),
+  ...headerRows.map((rr) => ({ repeatCell: { range: { sheetId: sid, startRowIndex: rr, endRowIndex: rr + 1, startColumnIndex: 0, endColumnIndex: 8 }, cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 0.9, green: 0.9, blue: 0.9 } } }, fields: "userEnteredFormat(textFormat,backgroundColor)" } })),
+  ...totalRows.map((rr) => ({ repeatCell: { range: { sheetId: sid, startRowIndex: rr, endRowIndex: rr + 1, startColumnIndex: 0, endColumnIndex: 8 }, cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: "userEnteredFormat.textFormat" } })),
   ...currencyRanges.map((g) => ({ repeatCell: { range: { sheetId: sid, startRowIndex: g.r0, endRowIndex: g.r1, startColumnIndex: g.c0, endColumnIndex: g.c1 }, cell: { userEnteredFormat: { numberFormat: { type: "CURRENCY", pattern: "$#,##0" } } }, fields: "userEnteredFormat.numberFormat" } })),
-  { autoResizeDimensions: { dimensions: { sheetId: sid, dimension: "COLUMNS", startIndex: 0, endIndex: 6 } } },
+  { autoResizeDimensions: { dimensions: { sheetId: sid, dimension: "COLUMNS", startIndex: 0, endIndex: 8 } } },
 ];
 await sheets.spreadsheets.batchUpdate({ spreadsheetId: SHEET_ID, requestBody: { requests: fmt } });
 

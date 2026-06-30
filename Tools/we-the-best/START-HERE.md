@@ -86,14 +86,20 @@ node summary-tab.mjs              # example
 
 ### Common task → reach for this
 - **Receiving tires (stock coming IN)?** Use the **Tire Intake web app**
-  (`apps-script/tire-intake.gs` + `tire-intake.html`). Phone page: type a size any way
-  ("225 45 17", "225/45R17", "4 225 45 17"), it standardizes to `WWW-AA-DD` and bumps that
-  size's Qty on Hand (one row per size), or appends a clean new row for a new size. Bad input
-  -> "didn't catch that, type it again", nothing written. Sales are NOT here — they stay in the
-  sheet's Inv Item dropdown so the profit link holds. ⚠️ New sizes flow into mom's sale dropdown
-  only while they land inside the catalog FILTER range (`Tire Inventory!A2:A41`); ~15 rows of
-  headroom now. Add to a SECOND deployment of the SAME bound project (Deploy -> Web app,
-  Execute as owner, Access Anyone); owner pastes both files by hand.
+  (`apps-script/tire-intake.gs` + `tire-intake-page.html`). Phone page: pick **Nueva / Usada**
+  (sticky toggle), then type a size any way ("225 45 17", "225/45R17", "4 225 45 17"). It
+  standardizes to `WWW-AA-DD` and writes the **combined label `"<size> <Nueva|Usada>"`** into
+  Tire Inventory col **A** (e.g. `225-45-17 Usada`), Qty on Hand in col **B**. New and Used of a
+  size are **two separate rows / sellable lines**; same size+condition bumps its count, a first-time
+  size+condition appends a row. Bad input -> "no entendí, escríbelo otra vez", nothing written.
+  Sales are NOT here — they stay in the sheet's Inv Item dropdown (mom now picks the exact
+  size+condition, and the count drops from that bucket) so the profit link holds. The combined
+  label IS the dropdown value, so **`we-the-best-onedit.gs` and the catalog FILTER need no
+  changes** (they match col A exactly, decrement col B). Catalog FILTER widened to
+  `Tire Inventory!A2:A100` (each size can take 2 rows now); dropdown validation is `G3:G400`, room
+  to spare. Add to a SECOND deployment of the SAME bound project (Deploy -> Web app, Execute as
+  owner, Access Anyone); owner pastes both files by hand. Inventory labels are Spanish
+  (Nueva/Usada) to match mom's sale dropdown — flip in `normCondition`/the toggle if English is wanted.
 - **Owner adding a new day?** This is now **self-service via the Apps Script** — no agent needed.
   The owner just types/pastes the day's rows; `we-the-best-onedit.gs` auto-fills **Labor (D)** and
   **Profit (F)** on each row, and typing `total` in column A of a blank row builds the

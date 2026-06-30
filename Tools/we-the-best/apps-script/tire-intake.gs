@@ -6,11 +6,19 @@
  *   "225 45 17"  ·  "225/45R17"  ·  "P225/45R17"  ·  "2254517"  ·  "4 225 45 17"
  *   "225 45 17 x4"  ·  "qty 8 205 60 16"  ...
  * The script pulls the three numbers out, reformats to the standard size
- * (WWW-AA-DD, e.g. 225-45-17), and updates Tire Inventory:
- *   - size already listed  -> add the count to its Qty on Hand (one row per size)
- *   - new size             -> append a clean new row with the count
+ * (WWW-AA-DD, e.g. 225-45-17), and tags it with the New/Used the operator picked
+ * on the page (the Nueva/Usada toggle). The Tire Inventory row key is the combined
+ * label "<size> <Nueva|Usada>" (e.g. "225-45-17 Usada"), which is exactly what mom
+ * sees and picks in her sale dropdown — so New and Used of one size are two separate
+ * sellable lines, each with its own count. It then updates Tire Inventory:
+ *   - that size+condition already listed -> add the count to its Qty on Hand
+ *   - first time for that size+condition -> append a clean new row with the count
  * If it can't read a valid size it replies "didn't catch that, type it again"
  * and NOTHING is written until the input is clean.
+ *
+ * NOTE: column A holds the "<size> <condition>" label and B holds Qty on Hand, so the
+ * sale-link onEdit and the catalog FILTER (Tire Inventory!A2:A…) need NO changes — they
+ * already match column A exactly and decrement column B.
  *
  * UNDO: press-and-hold a sent size on the phone -> confirm -> undoTire() subtracts
  * that same count back off the size's Qty on Hand (never below 0).
@@ -49,11 +57,20 @@ function parseIntake(raw) {
   if (!text) return { ok: false };
   var up = text.toUpperCase();
 
-  // 1) explicit quantity markers ("4x", "x4", "qty 4"), then strip them out
+  // 0) condition word typed in the text (Spanish or English) — overrides the page toggle.
+  //    "usada/usado/usadas", "nueva/nuevo/nuevas", "used", "new". Then strip it out.
+  var condition = null;
+  if (/\b(?:USAD[AO]S?|USED)\b/.test(up)) condition = "Usada";
+  else if (/\b(?:NUEV[AO]S?|NEW)\b/.test(up)) condition = "Nueva";
+  up = up.replace(/\b(?:USAD[AO]S?|USED|NUEV[AO]S?|NEW)\b/g, " ");
+
+  // 1) explicit quantity markers — English ("4x", "x4", "qty 4") and Spanish
+  //    ("cantidad 4", "cant 4", "4 piezas"/"pzas"). Then strip them out.
   var qty = null, qm;
   if ((qm = up.match(/(\d{1,3})X(?![0-9])/))) { qty = parseInt(qm[1], 10); up = up.replace(qm[0], " "); }
   else if ((qm = up.match(/X\s*(\d{1,3})(?![0-9])/))) { qty = parseInt(qm[1], 10); up = up.replace(qm[0], " "); }
-  else if ((qm = up.match(/(?:QTY|QUANTITY|COUNT)\D{0,3}(\d{1,3})/))) { qty = parseInt(qm[1], 10); up = up.replace(qm[0], " "); }
+  else if ((qm = up.match(/(?:QTY|QUANTITY|COUNT|CANT(?:IDAD)?|CTD)\D{0,3}(\d{1,3})/))) { qty = parseInt(qm[1], 10); up = up.replace(qm[0], " "); }
+  else if ((qm = up.match(/(\d{1,3})\s*(?:PIEZAS?|PZAS?|UNID(?:ADES?)?|LLANTAS?)\b/))) { qty = parseInt(qm[1], 10); up = up.replace(qm[0], " "); }
 
   // 2) the size triple: 3 digits, 2 digits, 2 digits, any junk (incl. R/ZR/P/LT) between
   var w, a, d, matchStr = null;
@@ -81,17 +98,28 @@ function parseIntake(raw) {
   if (D < 12 || D > 28) return { ok: false };
   if (!(qty >= 1 && qty <= 99)) return { ok: false };
 
-  return { ok: true, size: w + "-" + a + "-" + d, qty: qty };
+  return { ok: true, size: w + "-" + a + "-" + d, qty: qty, condition: condition };
+}
+
+/** Normalize the page's toggle into "Nueva" or "Usada" (defaults to Nueva). */
+function normCondition(c) {
+  var s = String(c == null ? "" : c).trim().toLowerCase();
+  if (s === "usada" || s === "usado" || s === "used" || s === "u") return "Usada";
+  return "Nueva"; // default to New
 }
 
 /**
- * Called from the page. Receives stock for one size.
- * Returns { ok, message, size, qty, onHand, isNew } for the reply bubble.
+ * Called from the page. Receives stock for one size + condition (New/Used).
+ * Returns { ok, message, size, qty, onHand, isNew, condition } for the reply bubble.
+ * `size` is the combined "<size> <condition>" label, which is also the undo key.
  * Writes NOTHING unless the size parses clean.
  */
-function receiveTire(raw) {
+function receiveTire(raw, condition) {
   var p = parseIntake(raw);
   if (!p.ok) return { ok: false, message: "no entendí, escríbelo otra vez" };
+
+  var cond = normCondition(p.condition || condition); // a typed word (Spanish/English) wins, else the toggle
+  var label = p.size + " " + cond; // row key + what mom sees/picks in the sale dropdown
 
   var lock = LockService.getScriptLock();
   try { lock.waitLock(15000); } catch (e) {
@@ -107,27 +135,27 @@ function receiveTire(raw) {
     for (var i = 0; i < rows.length; i++) {
       var name = (rows[i][0] || "").toString().trim();
       if (name.toUpperCase() === "TOTAL") { totalRow = i + 2; continue; }
-      if (name === p.size) { foundRow = i + 2; current = Number(rows[i][1]) || 0; break; }
+      if (name === label) { foundRow = i + 2; current = Number(rows[i][1]) || 0; break; }
     }
 
     var onHand;
-    if (foundRow) {                       // existing size -> add to its count
+    if (foundRow) {                       // size+condition already listed -> add to its count
       onHand = current + p.qty;
       sh.getRange(foundRow, 2).setValue(onHand);
-    } else {                              // new size -> clean new row
+    } else {                              // first time for this size+condition -> clean new row
       onHand = p.qty;
       var target = totalRow ? totalRow : (last + 1); // keep above a TOTAL row if present
       if (totalRow) sh.insertRowBefore(totalRow);
-      sh.getRange(target, 1).setValue(p.size);
+      sh.getRange(target, 1).setValue(label);
       sh.getRange(target, 2).setValue(onHand);
     }
 
     var times = p.qty === 1 ? "" : (p.qty + " × ");
-    var tag = foundRow ? "" : " (nueva medida)";
+    var tag = foundRow ? "" : " (primera vez)";
     return {
       ok: true,
-      size: p.size, qty: p.qty, onHand: onHand, isNew: !foundRow,
-      message: "Agregué " + times + p.size + tag + ". Ahora hay " + onHand + " en inventario."
+      size: label, qty: p.qty, onHand: onHand, isNew: !foundRow, condition: cond,
+      message: "Agregué " + times + p.size + " (" + cond + ")" + tag + ". Ahora hay " + onHand + " en inventario."
     };
   } finally {
     lock.releaseLock();

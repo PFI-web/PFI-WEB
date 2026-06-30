@@ -88,10 +88,21 @@
 
     /* ---- input bar ---- */
     footer {
-      flex:0 0 auto; display:flex; align-items:flex-end; gap:7px;
+      flex:0 0 auto; display:flex; flex-direction:column; gap:7px;
       background:var(--footer); padding:7px 8px;
       padding-bottom:calc(7px + env(safe-area-inset-bottom));
     }
+    .inputrow { display:flex; align-items:flex-end; gap:7px; }
+
+    /* new / used picker */
+    .cond { display:flex; gap:8px; padding:0 2px; }
+    .cond-btn {
+      flex:1 1 0; border:1.5px solid #00806955; background:#fff; color:var(--wa-green);
+      font-size:16px; font-weight:600; padding:9px 0; border-radius:20px; cursor:pointer;
+    }
+    .cond-btn.active { background:var(--wa-green); color:#fff; border-color:var(--wa-green); }
+    .cond-btn:active { opacity:.85; }
+    .cond-tag { font-size:13px; opacity:.6; }
     .inpwrap {
       flex:1 1 auto; min-width:0; display:flex; align-items:center; gap:9px;
       background:#fff; border-radius:26px; padding:13px 16px; box-shadow:0 1px .5px #0001;
@@ -118,6 +129,7 @@
       #send { width:48px; height:48px; }
       #send svg { width:22px; height:22px; }
       .actions { gap:13px; font-size:18px; }
+      .cond-btn { font-size:15px; padding:8px 0; }
       footer { gap:6px; padding:7px 7px; padding-bottom:calc(7px + env(safe-area-inset-bottom)); }
     }
 
@@ -160,22 +172,29 @@
 
   <div id="log">
     <div class="day">Hoy</div>
-    <div class="row bot"><div class="bubble">Mándame una medida de llanta y la agrego al inventario.
+    <div class="row bot"><div class="bubble">Elige <b>Nueva</b> o <b>Usada</b>, mándame la medida y la agrego al inventario.
 Como <b>225 45 17</b> — o <b>4 225 45 17</b> para cuatro.
+También puedes escribirlo, como <b>4 225 45 17 usadas</b>.
 ¿Te equivocaste? <b>Mantén presionada</b> una medida enviada para deshacerla.<span class="meta" id="greetmeta"></span></div></div>
   </div>
 
   <footer>
-    <div class="inpwrap">
-      <span class="ico">😊</span>
-      <input id="txt" type="text" inputmode="text" autocomplete="off" autocapitalize="off"
-             autocorrect="off" spellcheck="false" placeholder="Escribe una medida" enterkeyhint="send">
-      <span class="ico">📎</span>
-      <span class="ico">📷</span>
+    <div class="cond" id="cond">
+      <button type="button" class="cond-btn active" data-cond="Nueva">Nueva</button>
+      <button type="button" class="cond-btn" data-cond="Usada">Usada</button>
     </div>
-    <button id="send" aria-label="Enviar">
-      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-    </button>
+    <div class="inputrow">
+      <div class="inpwrap">
+        <span class="ico">😊</span>
+        <input id="txt" type="text" inputmode="text" autocomplete="off" autocapitalize="off"
+               autocorrect="off" spellcheck="false" placeholder="Escribe una medida" enterkeyhint="send">
+        <span class="ico">📎</span>
+        <span class="ico">📷</span>
+      </div>
+      <button id="send" aria-label="Enviar">
+        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </div>
   </footer>
 
   <div class="modal-back" id="modal" hidden>
@@ -194,6 +213,18 @@ Como <b>225 45 17</b> — o <b>4 225 45 17</b> para cuatro.
     var txt = document.getElementById('txt');
     var send = document.getElementById('send');
     var statusEl = document.getElementById('status');
+
+    // ---- new / used toggle (sticky, so you can add several of the same in a row) ----
+    var cond = document.getElementById('cond');
+    var condValue = 'Nueva';
+    cond.addEventListener('click', function (e) {
+      var b = e.target.closest('.cond-btn'); if (!b) return;
+      condValue = b.dataset.cond;
+      Array.prototype.forEach.call(cond.querySelectorAll('.cond-btn'), function (x) {
+        x.classList.toggle('active', x === b);
+      });
+      txt.focus();
+    });
 
     function clock() {
       var d = new Date(), h = d.getHours(), m = d.getMinutes(), ap = h < 12 ? 'AM' : 'PM';
@@ -294,7 +325,8 @@ Como <b>225 45 17</b> — o <b>4 225 45 17</b> para cuatro.
     function submit() {
       var raw = txt.value.trim();
       if (!raw) return;
-      var myRow = bubble(esc(raw), 'me', true);
+      var sentCond = condValue;
+      var myRow = bubble(esc(raw) + ' <span class="cond-tag">· ' + esc(sentCond) + '</span>', 'me', true);
       txt.value = '';
       txt.focus();
       send.disabled = true;
@@ -311,7 +343,7 @@ Como <b>225 45 17</b> — o <b>4 225 45 17</b> para cuatro.
       google.script.run
         .withSuccessHandler(function (res) { done(); bubble(esc(res.message), res.ok ? 'bot' : 'err', false); if (res.ok) makeUndoable(myRow, res.size, res.qty); })
         .withFailureHandler(function () { done(); bubble('algo salió mal, intenta otra vez', 'err', false); })
-        .receiveTire(raw);
+        .receiveTire(raw, sentCond);
     }
 
     send.addEventListener('click', submit);
